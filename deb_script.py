@@ -73,18 +73,18 @@ pol1 = polar_trfm(im1, int(s_ang), int(s_rad), A)
 
 print("Precount FBM of im1")
 
-Fm_arr = np.zeros((len(Im1) + len(Ih1) + len(Imm), len(x_net)))
-c2_coefs = np.zeros((len(Im1), len(Ih1), len(x_net)))
+Fm_arr = np.zeros((len(Im1) + len(Ih1) + len(Imm), len(x_net)), dtype='complex')
+# c2_coefs = np.zeros((len(Im1), len(Ih1), len(x_net)))
 for it_m1 in range(len(Im1)):
     m1 = Im1[it_m1]
-    c1 = sp.special.jn(m1, b * x_net) * x_net
+    # c1 = sp.special.jn(m1, b * x_net) * x_net
     for it_h1 in range(len(Ih1)):
         h1 = Ih1[it_h1]
-        c2 = sp.special.jn(h1, b * x_net) * c1
-        c2_coefs[it_m1, it_h1, :] = c2
+        # c2 = sp.special.jn(h1, b * x_net) * c1
+        # c2_coefs[it_m1, it_h1, :] = c2
         for it_mm in range(len(Imm)):
             mm = Imm[it_mm]
-            if Fm_arr[it_m1 + it_h1 + it_mm, :].sum() != 0:
+            if Fm_arr[it_m1 + it_h1 + it_mm, :].sum() == 0:
                 Fm = FBT(pol1, m1+h1+mm, x_net, u_net, theta_net)
                 Fm_arr[it_m1 + it_h1 + it_mm, :] = Fm
 
@@ -101,10 +101,12 @@ for f in os.listdir(path):
     pol2 = polar_trfm(im2, int(s_ang), int(s_rad), A)
 
     for it_m1 in range(len(Im1)):
-        # m1 = Im1[it_m1]
+        m1 = Im1[it_m1]
+        c1 = sp.special.jn(m1, b * x_net) * x_net
         for it_h1 in range(len(Ih1)):
-            # h1 = Ih1[it_h1]
-            c2 = c2_coefs[it_m1, it_h1, :]
+            h1 = Ih1[it_h1]
+            # c2 = c2_coefs[it_m1, it_h1, :]
+            c2 = sp.special.jn(h1, b * x_net) * c1
             for it_mm in range(len(Imm)):
                 mm = Imm[it_mm]
                 coef = 2*np.pi * np.exp(1j*(h1+mm)*eps)
@@ -156,11 +158,12 @@ for f in os.listdir(path):
     pol2 = polar_trfm(im2, int(s_ang), int(s_rad), A)
 
     for it_m1 in range(len(Im1)):
-        # m1 = Im1[it_m1]
-        # c1 = sp.special.jn(m1, b*x_net) * x_net
+        m1 = Im1[it_m1]
+        c1 = sp.special.jn(m1, b * x_net) * x_net
         for it_h1 in range(len(Ih1)):
-            # h1 = Ih1[it_h1]
-            c2 = c2_coefs[it_m1, it_h1, :]
+            h1 = Ih1[it_h1]
+            # c2 = c2_coefs[it_m1, it_h1, :]
+            c2 = sp.special.jn(h1, b * x_net) * c1
             for it_mm in range(len(Imm)):
                 mm = Imm[it_mm]
                 coef = 2*np.pi * np.exp(1j*(h1+mm)*eps)

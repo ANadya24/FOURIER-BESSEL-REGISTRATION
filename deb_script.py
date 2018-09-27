@@ -88,9 +88,9 @@ for it_m1 in range(len(Im1)):
                 Fm = FBT(pol1, m1+h1+mm, x_net, u_net, theta_net)
                 Fm_arr[it_m1 + it_h1 + it_mm, :] = Fm
 
-cols = ['GT_angle', 'GT_x', 'GT_y', 'angle', 'x', 'y','psi', 'etta', 'omega', 'time']
+cols = ['GT_rho', 'GT_x', 'GT_y', 'x', 'y', 'rho', 'psi', 'etta', 'omega', 'time']
 df = pd.DataFrame(columns=cols)
-path = path_in + "dataset/1/"
+path = path_in + "dataset/3/"
 for f in os.listdir(path):
     if f.endswith('.png'):
         im2 = misc.imread(os.path.join(path, f))
@@ -136,18 +136,19 @@ for f in os.listdir(path):
     time = end - start
     print(f)
     st = f.split('_')
-    gt_x = st[1]
-    gt_y = st[2]
-    gt_a = st[3].split('.')[0]
-    towrt = {'GT_angle': gt_a, 'GT_x': gt_x, 'GT_y': gt_y, 'angle': a, 'x': x,
-             'y': y, 'psi': psi, 'etta': etta, 'omega': omegga, 'time': time}
+    gt_rho = st[1]
+    gt_a = st[2].split('.')[0]
+    gt_x = np.int(gt_rho) * np.cos(np.radians(np.int(gt_a)))
+    gt_y = np.int(gt_rho) * np.sin(np.radians(np.int(gt_a)))
+    towrt = {'GT_rho': gt_rho, 'GT_x': gt_x, 'GT_y': gt_y, 'x': x,
+             'y': y, 'rho': rho, 'psi': psi, 'etta': etta, 'omega': omegga, 'time': time}
     df = df.append(towrt, ignore_index=True)
-df.to_csv(path_in + 'dataset/1.csv', columns=cols)
+df.to_csv(path_in + 'dataset/3.csv', columns=cols)
 
 print("Done first")
 
 df = pd.DataFrame(columns=cols)
-path = path_in + "dataset/2/"
+path = path_in + "dataset/4/"
 for f in os.listdir(path):
     start = timer()
     if f.endswith('.png'):
@@ -192,13 +193,20 @@ for f in os.listdir(path):
     end = timer()
     time = end - start
     print(f)
+    # st = f.split('_')
+    # gt_x = st[1]
+    # gt_y = st[2]
+    # gt_a = st[3].split('.')[0]
+    # towrt = {'GT_angle': gt_a, 'GT_x': gt_x, 'GT_y': gt_y, 'angle': a, 'x': x,
+    #          'y': y, 'psi': psi, 'etta': etta, 'omega': omegga, 'time': time}
     st = f.split('_')
-    gt_x = st[1]
-    gt_y = st[2]
-    gt_a = st[3].split('.')[0]
-    towrt = {'GT_angle': gt_a, 'GT_x': gt_x, 'GT_y': gt_y, 'angle': a, 'x': x,
-             'y': y, 'psi': psi, 'etta': etta, 'omega': omegga, 'time': time}
+    gt_rho = st[1]
+    gt_a = st[2].split('.')[0]
+    gt_x = np.int(gt_rho) * np.cos(np.radians(np.int(gt_a)))
+    gt_y = np.int(gt_rho) * np.sin(np.radians(np.int(gt_a)))
+    towrt = {'GT_rho': gt_rho, 'GT_x': gt_x, 'GT_y': gt_y, 'x': x,
+             'y': y, 'rho': rho, 'psi': psi, 'etta': etta, 'omega': omegga, 'time': time}
     df = df.append(towrt, ignore_index=True)
-df.to_csv(path_in + 'dataset/2.csv', columns=cols)
+df.to_csv(path_in + 'dataset/4.csv', columns=cols)
 
 print("Done second")

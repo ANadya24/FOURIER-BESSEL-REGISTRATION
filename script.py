@@ -43,7 +43,7 @@ def polar_trfm(Im, ntheta, nrad, rmax):
     return PolIm
 
 A = 80 #radius of the image
-p_s = 0.5
+p_s = 1
 s_ang = np.pi*A/p_s
 B = s_ang/2
 s_rad = 2*B/np.pi
@@ -75,7 +75,7 @@ pol1 = polar_trfm(im1, int(s_ang), int(s_rad), A)
 print("Precount FBM of im1")
 
 Fm_arr = np.zeros((len(Im1) + len(Ih1) + len(Imm), len(x_net)), dtype='complex')
-c2_coefs = np.zeros((len(Im1), len(Ih1), len(x_net)))
+# c2_coefs = np.zeros((len(Im1), len(Ih1), len(x_net)))
 for it_m1 in tqdm.tqdm(range(len(Im1))):
     m1 = Im1[it_m1]
     # c1 = sp.special.jn(m1, b * x_net) * x_net
@@ -93,7 +93,8 @@ for it_m1 in tqdm.tqdm(range(len(Im1))):
 # df = pd.DataFrame(columns=cols)
 
 im2 = misc.imread(path_in + "im2.png")
-# im2 = np.roll(im2, -3, 0)
+im2 = np.roll(im2, 3, 0)
+im2 = np.roll(im2, 2, 1)
 
 start = timer()
 Tf = np.zeros((len(Im1), len(Ih1), len(Imm)), dtype='complex')
@@ -126,12 +127,16 @@ etta = eta_net[ietta]
 omegga = omega_net[iomegga]
 # print(psi, etta, omegga)
 alpha = eps + omegga
-phi = np.angle(np.exp(1j*psi)*b*(1 + np.exp(1j*(etta - psi + eps))))
-rho = np.abs(b * np.sqrt(2*(1 + np.cos(etta - psi + eps))))
-x = rho * np.cos(phi)
-y = rho * np.sin(phi)
+phi = np.angle( np.exp(1j*(etta - psi + eps)))
+# rho = np.abs(b * np.sqrt(2*(1 + np.cos(etta - psi + eps))))
+rho = np.abs(np.complex(b+b*np.exp(etta - psi + eps)))
+x = rho * np.cos(np.angle((np.exp(1*1j*(omegga - psi + eps)) + np.exp(1*1j*(psi)))))
+y = rho * np.sin(np.angle((np.exp(1*1j*(omegga - psi + eps)) + np.exp(1*1j*(psi)))))
+x1 = rho * np.cos(phi)
+y1 = rho * np.sin(phi)
 a = alpha * 180 / np.pi - 360
 end = timer()
 time = end - start
 print(abs(alpha * 180 / np.pi - 360))
-print(x, y)
+print(x, y, rho)
+print(x1, y1)

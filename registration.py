@@ -20,7 +20,7 @@ def set_integration_intervals(bandwidth: int = 128,
                               pixel_sampling: float = 1., com_offset: float = 7.):
     '''
     Init the bandwith B, displacement samples k
-    :param bandwith: radius of the image
+    :param bandwidth: radius of the image
     :param pixel_sampling:
     :param com_offset: maximum expected offset of COM (0.025 * image_diameter)
     :return:
@@ -64,7 +64,17 @@ def set_integration_intervals(bandwidth: int = 128,
     omega_net = np.linspace(-np.pi, np.pi, len(Imm))
     psi_net = np.linspace(-np.pi, np.pi, int(4 * b * bandwidth / image_radius))
     eta_net = np.linspace(-np.pi, np.pi, int(4 * b * bandwidth / (np.pi * image_radius)))
-    return Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps
+    return Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b
+
+
+def laguerre_functions_precompute(alphas: List[int],
+                                  x: np.ndarray, lag_func_num: int = 40, lag_scale: float = 3):
+    laguerre_functions = {}
+    lag_object = Laguerre()
+    for alpha in alphas:
+        lag_functions = lag_object.create_functions_x2_2sqrtx(lag_func_num, alpha, x * lag_scale, 1)
+        laguerre_functions[alpha] = lag_functions
+    return laguerre_functions
 
 
 def image_fbt_precompute(image: np.ndarray, alphas: List[int], theta_net: np.ndarray,
@@ -74,12 +84,18 @@ def image_fbt_precompute(image: np.ndarray, alphas: List[int], theta_net: np.nda
     assert method in ['fbm', 'fbm_laguerre', 'fast_fbm_laguerre'], 'Choose one of the set options for the method!'
 
     fbt_arr = {}
-    for alpha in tqdm(range(len(alphas))):
+    if method in ['fbm_laguerre', 'fast_fbm_laguerre'] and 'laguerre_functions' in additional_params:
+        laguerre_functions = additional_params['laguerre_functions']
+    else:
+        laguerre_functions = None
+
+    for alpha in alphas:
         if method == 'fbm':
             Fm = FBT(image, alpha, x_net, u_net, theta_net)
         elif method == 'fbm_laguerre':
             Fm = FBT_Laguerre(image, abs(alpha), x_net, u_net, theta_net, lag_func_num,
-                              scale=lag_scale, num_dots=lag_num_dots)
+                              scale=lag_scale, num_dots=lag_num_dots,
+                              out_lag_functions=laguerre_functions[abs(alpha)])
             if alpha < 0:
                 Fm *= (-1) ** abs(alpha)
         else:
@@ -90,7 +106,15 @@ def image_fbt_precompute(image: np.ndarray, alphas: List[int], theta_net: np.nda
             Fm = FBT_Laguerre_fast(image, abs(alpha),
                                    x_net, u_net, theta_net,
                                    lag_func_num, scale=lag_scale,
-                                   num_dots=lag_num_dots, zeros=zeros)
+                                   num_dots=lag_num_dots, zeros=zeros,
+                                   lag_functions=laguerre_functions[abs(alpha)])
+            # if alpha == 0:
+            #     plt.figure()
+            #     plt.plot(np.arange(len(Fm)), Fm)
+            #     plt.title('alpha 0 fbt fast')
+            #     plt.figure()
+            #     plt.plot(np.arange(len(laguerre_functions[0][0])), laguerre_functions[0][0])
+            #     plt.title('Laguerre_func')
             if alpha < 0:
                 Fm *= (-1) ** abs(alpha)
 
@@ -98,13 +122,13 @@ def image_fbt_precompute(image: np.ndarray, alphas: List[int], theta_net: np.nda
     return fbt_arr
 
 
-def laguere_zeros_precompute(alphas: List[int], lag_func_num: int = 40):
+def laguerre_zeros_precompute(alphas: List[int], lag_func_num: int = 40, abort_after: float = 1.):
     lag_object = Laguerre()
     zeros_lag = {}
     for alpha in tqdm(alphas):
         if alpha in zeros_lag:
             continue
-        zeros = lag_object.laguerre_zeros(lag_func_num, alpha, abort_after=1)
+        zeros = lag_object.laguerre_zeros(lag_func_num, alpha, abort_after=abort_after)
         zeros_lag[alpha] = zeros
     return zeros_lag
 
@@ -120,10 +144,10 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
     assert method in ['fbm', 'fbm_laguerre', 'fast_fbm_laguerre'], 'Choose one of the set options for the method!'
 
     if 'integration_intervals' in additional_params:
-        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps \
+        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b \
             = additional_params['integration_intervals']
     else:
-        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps = \
+        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b = \
             set_integration_intervals(bandwidth, p_s, com_offset)
 
     maxrad = im1.shape[0] ** 2 + im1.shape[1] ** 2
@@ -139,7 +163,7 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
         Fm_arr = additional_params['precomputed_fbt_fixed']
     else:
         alphas = []
-        for it_m1 in tqdm(range(len(Im1))):
+        for it_m1 in range(len(Im1)):
             m1 = Im1[it_m1]
             for it_h1 in range(len(Ih1)):
                 h1 = Ih1[it_h1]
@@ -148,6 +172,11 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
                     if m1 + h1 + mm in alphas:
                         continue
                     alphas.append(m1 + h1 + mm)
+        # print('Fm precompute')
+        if method in ['fbm_laguerre', 'fast_fbm_laguerre'] and \
+                'laguerre_functions' not in additional_params:
+            additional_params['laguerre_functions'] = laguerre_functions_precompute(alphas, x_net,
+                                                                                    lag_func_num, lag_scale)
         Fm_arr = image_fbt_precompute(pol1, alphas, theta_net, u_net, x_net,
                                       method, lag_func_num, lag_scale,
                                       lag_num_dots,
@@ -159,18 +188,18 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
         c1_coefs = np.zeros((len(Im1), len(x_net)))
         for it_m1 in range(len(Im1)):
             m1 = Im1[it_m1]
-            c1 = sp.special.jv(m1, bandwidth * x_net) * x_net
+            c1 = sp.special.jv(m1, b * x_net) * x_net
             c1_coefs[it_m1, :] = c1
 
     if 'precomputed_c2_coefs' in additional_params:
         c2_coefs = additional_params['precomputed_c2_coefs']
     else:
         c2_coefs = np.zeros((len(Ih1), len(x_net)))
-        for it_m1 in tqdm(range(len(Im1))):
+        for it_m1 in range(len(Im1)):
             for it_h1 in range(len(Ih1)):
                 h1 = Ih1[it_h1]
                 if it_m1 == 0:
-                    c2 = sp.special.jv(h1, bandwidth * x_net)
+                    c2 = sp.special.jv(h1, b * x_net)
                     c2_coefs[it_h1, :] = c2
 
     if shift_by_mask:
@@ -198,11 +227,12 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
     if 'precomputed_fbt_moving' in additional_params:
         Gm_arr = additional_params['precomputed_fbt_moving']
     else:
+        # print('Gm precompute')
         Gm_arr = image_fbt_precompute(pol2, Imm, theta_net, u_net, x_net, method,
                                       lag_func_num, lag_scale, lag_num_dots,
                                       additional_params)
 
-    for it_m1 in tqdm(range(len(Im1))):
+    for it_m1 in range(len(Im1)):
         c1 = c1_coefs[it_m1, :]
         m1 = Im1[it_m1]
         for it_h1 in range(len(Ih1)):
@@ -291,6 +321,7 @@ def apply_transform(image, transform_dict, center=None, verbose=False):
         im_shifted_o, get_mat_2x3(mat_trans_rot),
         (im_shifted_o.shape[1], im_shifted_o.shape[0])
     )
-    plt.figure()
-    plt.imshow((np.stack([image, final_image, image * 0], -1) * 255).astype('uint8'))
+    if verbose:
+        plt.figure()
+        plt.imshow((np.stack([image, final_image, image * 0], -1) * 255).astype('uint8'))
     return final_image

@@ -43,7 +43,7 @@ def iou(im1, im2):
     im2 = im2 > 0
     inter = (im1 * im2).sum()
     union = (im1 | im2).sum()
-    return inter /(union + 1e-7)
+    return inter / (union + 1e-7)
 
 
 

@@ -10,13 +10,15 @@ import tqdm
 
 
 def FBT(pol, m, x_net, u_net, theta_net):
-    # compute formulas 10 and 11 from article
-    # Parameters:
-    # pol : image resampled to polar coordinates
-    # m : order of Bessel function (non integer give errors)
-    # x_net : vector of x from formula 10
-    # u_net, theta_net: polar grid of the given image
-    # return: vector of len(x_net)
+    """
+        compute formulas 10 and 11 from article
+        Parameters:
+        pol : image resampled to polar coordinates
+        m : order of Bessel function (non integer give errors)
+        x_net : vector of x from formula 10
+        u_net, theta_net: polar grid of the given image
+        return: vector of len(x_net)
+    """
 
     f1 = np.exp(-1j * m * theta_net)
     f2 = pol * f1.reshape(1, -1)

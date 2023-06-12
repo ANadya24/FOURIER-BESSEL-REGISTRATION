@@ -3,6 +3,7 @@ import numpy as np
 from tqdm import tqdm
 import time
 
+
 class Laguerre:
     def __init__(self):
         self._maxX = 10
@@ -83,24 +84,36 @@ class Laguerre:
         #             print('Warning! lengths are not equal!', self._length, len(x))
         #             self._length = len(x)
 
-        functions = [[]] * max_number
+        functions = np.zeros((max_number, len(x)))
         norm = None
+        if isinstance(x, list):
+            x = np.array(x)
 
         if max_number >= 0:
             norm = 1
             for i in range(1, alpha + 1):
                 norm *= i
             norm = (1 / norm) ** 0.5
+            exp = np.exp(x * -a / 2.)
+            mul_alpha = (a * x) ** (abs(alpha) / 2.)
+            if alpha < 0:
+                mul_alpha = 1 / mul_alpha
+            value = norm * exp * mul_alpha
+            value[np.isnan(value)] = 0.
+            functions[0] = value
 
-
-            for i in range(len(x)):
-                if alpha < 0:
-                    mul_alpha = 1 / ((a * x[i]) ** (-alpha / 2) + 1e-7)
-                else:
-                    mul_alpha = (a * x[i]) ** (alpha / 2)
-                if np.isnan(norm * np.exp(-a * x[i] / 2) * mul_alpha):
-                    print(mul_alpha, np.exp(-a * x[i] / 2), norm)
-                functions[0].append(norm * np.exp(-a * x[i] / 2) * mul_alpha)
+            # for i in range(len(x)):
+            #
+            #     if alpha < 0:
+            #         mul_alpha = 1 / ((a * x[i]) ** (-alpha / 2) + 1e-7)
+            #     else:
+            #         mul_alpha = (a * x[i]) ** (alpha / 2)
+            #     if np.isnan(norm * np.exp(-a * x[i] / 2) * mul_alpha):
+            #         print('alpha', alpha, i, x[i], a)
+            #         print(mul_alpha, np.exp(-a * x[i] / 2), norm)
+            #         functions[0].append(0.)
+            #     else:
+            #         functions[0].append(norm * np.exp(-a * x[i] / 2) * mul_alpha)
 
         if max_number == 1:
             return functions
@@ -108,19 +121,22 @@ class Laguerre:
         if max_number >= 1:
             norm = (1 / (alpha + 1)) ** 0.5
 
-            functions[1] = []
-            for i in range(len(x)):
-                functions[1].append(norm * (1 + alpha - a * x[i]) * functions[0][i])
+            functions[1] = norm * (1 + alpha - a * x) * functions[0]
+            # functions[1] = []
+            # for i in range(len(x)):
+            #     functions[1].append(norm * (1 + alpha - a * x[i]) * functions[0][i])
 
         if max_number == 2:
             return functions
 
         for j in range(2, max_number):
-            functions[j] = []
-            for i in range(len(x)):
-                functions[j].append(
-                    functions[j - 1][i] * (-x[i] * a + 2 * j - 1 + alpha) / (j * (j + alpha)) ** 0.5 -
-                    functions[j - 2][i] * ((j - 1) * (alpha + j - 1) / (j * (j + alpha))) ** 0.5)
+            functions[j] = functions[j - 1] * (-x * a + 2 * j - 1 + alpha) / (j * (j + alpha)) ** 0.5 - \
+                           functions[j - 2] * ((j - 1) * (alpha + j - 1) / (j * (j + alpha))) ** 0.5
+            # functions[j] = []
+            # for i in range(len(x)):
+            #     functions[j].append(
+            #         functions[j - 1][i] * (-x[i] * a + 2 * j - 1 + alpha) / (j * (j + alpha)) ** 0.5 -
+            #         functions[j - 2][i] * ((j - 1) * (alpha + j - 1) / (j * (j + alpha))) ** 0.5)
 
         return functions
 
@@ -136,15 +152,17 @@ class Laguerre:
 
         if max_number < 0:
             return None
-        x2 = []
-        for i in range(len(x)):
-            x2.append(x[i] * x[i])
+        if isinstance(x, list):
+            x = np.array(x)
+
+        x2 = x * x
 
         functions = self.create_functions(max_number, alpha, x2, a * a)
 
         for m in range(max_number):
-            for i in range(len(x)):
-                functions[m][i] *= (2 * a * x[i]) ** 0.5
+            functions[m] *= (2 * a * x) ** 0.5
+            # for i in range(len(x)):
+            #     functions[m][i] *= (2 * a * x[i]) ** 0.5
 
         return functions
 
@@ -160,10 +178,10 @@ class Laguerre:
         :param a: параметр масштабирования сетки
         :return: коэффициенты разложения
         """
-        coefs = []
+        coefs = np.zeros(numberOfFunctions, dtype='complex')
         dx = a * (x[-1] - x[0]) / (len(x) - 1)
         for n in range(numberOfFunctions):
-            coefs.append((np.array(lag[n]) * data).sum() * dx)
+            coefs[n] = (np.array(lag[n]) * data).sum() * dx
         return coefs
 
     def transform_backward(self, numberOfFunctions: int, coefs: List[float],
@@ -176,15 +194,14 @@ class Laguerre:
         :return: восстановленная функция
         """
 
-        res = []
-        for _ in range(len(lag[0])):
-            res.append(0)
+        res = np.zeros(len(lag[0]), dtype='complex')
 
         for n in range(numberOfFunctions):
             if n % 2 == 1:
                 cur_coef = -coefs[n]
             else:
                 cur_coef = coefs[n]
+
             for x in range(len(lag[0])):
                 res[x] += cur_coef * lag[n][x]
         return res
@@ -239,22 +256,34 @@ class Laguerre:
         zeros = np.zeros(n)
         x1 = 0
         epsilon = np.finfo('float64').resolution
+        upper_value = n + alpha + (n - 1) * (n + alpha) ** 0.5
+        problems = False
+        problem_bag = []
 
         for roots in range(n):
             if (roots / n) < 0.1:
                 x1 = 1e-6
+
             cond = True
             start = time.time()
             while cond:
                 delta = time.time() - start
                 if delta >= abort_after:
+                    problems = True
+                    problem_bag.append(roots)
                     break
+
                 x0 = x1
                 l = self.lag_function(n, alpha, x0)
                 ln_1 = self.lag_function(n - 1, alpha, x0)
 
+                #             lag = lag_object.create_functions(n + 1, alpha, [x0], 1)
+                #             l = lag[n][0]
+                #             ln_1 = lag[n - 1][0]
+
                 if np.isnan(l):
                     l = 0.
+
                 if np.isnan(ln_1):
                     ln_1 = 0.
 
@@ -265,31 +294,50 @@ class Laguerre:
 
                 x1 = x0 - l / (l_sharp - l * l_sum + epsilon)
                 cond = abs(x0 - x1) > 5e-16 * (1 + abs(x1)) * 100
+
             zeros[roots] = x1
+
+            if x1 >= upper_value or x1 < 0 or np.isnan(x1):
+                problems = True
+                problem_bag.append(roots)
             x1 *= 0.5
 
-        return zeros
+        if problems:
+            goods = []
+            for i in range(len(zeros)):
+                if i not in problem_bag:
+                    goods.append(i)
+            zeros = np.take(zeros, goods, 0)
+
+        return np.sort(zeros)
 
     def transform_forward_fast_x2sqrtx_laguerre_quad(self, laguerre_zeros, n_coef, alpha, data, x):
         quadrature_order = len(laguerre_zeros)
-        mu = np.zeros(n_coef * quadrature_order)
+        # mu = np.zeros((n_coef, quadrature_order), dtype='complex')
 
-        lag = self.create_functions(quadrature_order + 2, alpha, laguerre_zeros, 1)
+        n_func = max(quadrature_order + 2, n_coef)
+        functions = self.create_functions(n_func, alpha, laguerre_zeros, 1)
+        lag = functions[:quadrature_order + 2]
         ksi = lag[quadrature_order + 1]
-        laguerre_func = self.create_functions(n_coef, alpha, laguerre_zeros, 1)
+        laguerre_func = functions[:n_coef]
 
-        for j in range(n_coef):
-            for i in range(quadrature_order):
-                mu[quadrature_order * j + i] = (laguerre_zeros[i]) ** 0.75\
-                                               * laguerre_func[j][i] / (ksi[i] * ksi[i] + 1e-7)
+        mu = laguerre_zeros.reshape(1, quadrature_order) ** 0.75 * laguerre_func / \
+             (ksi * ksi + 1e-7).reshape(1, -1)
 
-        data_interpolated = np.zeros(quadrature_order)
+        # for j in range(n_coef):
+        #     # for i in range(quadrature_order):
+        #     mu[j] = laguerre_zeros ** 0.75 * laguerre_func[j] / (ksi * ksi + 1e-7)
+
+        data_interpolated = np.zeros(quadrature_order, dtype='complex')
 
         #         sqrtZeros = np.zeros(quadrature_order)
         #         for i in range(quadrature_order):
         #             sqrtZeros[i] = laguerre_zeros[i] ** 0.5
         sqrtZeros = laguerre_zeros ** 0.5
 
+        # from scipy.interpolate import interp1d
+        # func = interp1d(x, data)
+        # data_interpolated = func(sqrtZeros)
         index = 1
         for i in range(quadrature_order):
             while (index < len(data) - 1) and (x[index] <= sqrtZeros[i]):
@@ -299,12 +347,14 @@ class Laguerre:
                 data_interpolated[i] = ((x[index] - sqrtZeros[i]) * data[index - 1] + (
                         sqrtZeros[i] - x[index - 1]) * data[index]) / (x[index] - x[index - 1])
 
-        laguerre_coeffs = np.zeros(n_coef)
-
-        for j in range(n_coef):
-            total_sum = 0
-            for i in range(quadrature_order):
-                total_sum += data_interpolated[i] * mu[quadrature_order * j + i]
-            laguerre_coeffs[j] = total_sum / (2 ** 0.5 * (quadrature_order + 1) * (quadrature_order + alpha + 1))
+        # laguerre_coeffs = np.zeros(n_coef, dtype='complex')
+        #
+        # for j in range(n_coef):
+        #     total_sum = (data_interpolated * mu[j]).sum()
+        #     # for i in range(quadrature_order):
+        #     #     total_sum += data_interpolated[i] * mu[quadrature_order * j + i]
+        #     laguerre_coeffs[j] = total_sum / (2 ** 0.5 * (quadrature_order + 1) * (quadrature_order + alpha + 1))
+        laguerre_coeffs = (data_interpolated.reshape(1, quadrature_order) * mu).sum(axis=1) / \
+                          (2 ** 0.5 * (quadrature_order + 1) * (quadrature_order + alpha + 1))
 
         return laguerre_coeffs

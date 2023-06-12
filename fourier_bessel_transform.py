@@ -75,7 +75,7 @@ def FBT_Hankel(pol, m, x_dest, x_src, theta_net):
     return Fm
 
 
-def FBT_Laguerre(pol, m, x_dest, x_src, theta_net, func_num, scale=1, num_dots=2000):
+def FBT_Laguerre(pol, m, x_dest, x_src, theta_net, func_num, scale=1, num_dots=2000, out_lag_functions=None):
     """
         compute formulas 10 and 11 from article
         Parameters:
@@ -104,20 +104,24 @@ def FBT_Laguerre(pol, m, x_dest, x_src, theta_net, func_num, scale=1, num_dots=2
     gm_hat = func_scale.x_compress_function(x_src_multi_dot, fm_hat, scale)
 
     lag_functions = lag_object.create_functions_x2_2sqrtx(func_num, m, x_src_multi_dot, 1)
-#     hankel_coefs = lag_object.transform_forward(func_num, gm_hat, lag_functions, x_src_multi_dot, 1)
-    hankel_coefs_real = lag_object.transform_forward(func_num, np.real(gm_hat), lag_functions, x_src_multi_dot, 1)
-    hankel_coefs_imag = lag_object.transform_forward(func_num, np.imag(gm_hat), lag_functions, x_src_multi_dot, 1)
+    hankel_coefs = lag_object.transform_forward(func_num, gm_hat, lag_functions, x_src_multi_dot, 1)
+    # hankel_coefs_real = lag_object.transform_forward(func_num, np.real(gm_hat), lag_functions, x_src_multi_dot, 1)
+    # hankel_coefs_imag = lag_object.transform_forward(func_num, np.imag(gm_hat), lag_functions, x_src_multi_dot, 1)
 
-    lag_functions = lag_object.create_functions_x2_2sqrtx(func_num, m, x_dest*scale, 1)
-#     Fm = np.array(lag_object.transform_backward(func_num, hankel_coefs, lag_functions))
-    Fm_real = np.array(lag_object.transform_backward(func_num, hankel_coefs_real, lag_functions))
-    Fm_imag = np.array(lag_object.transform_backward(func_num, hankel_coefs_imag, lag_functions))
-    Fm_forward = Fm_real + 1j * Fm_imag
+    if out_lag_functions is None:
+        lag_functions = lag_object.create_functions_x2_2sqrtx(func_num, m, x_dest * scale, 1)
+    else:
+        lag_functions = out_lag_functions
+    Fm_forward = np.array(lag_object.transform_backward(func_num, hankel_coefs, lag_functions))
+#     Fm_real = np.array(lag_object.transform_backward(func_num, hankel_coefs_real, lag_functions))
+#     Fm_imag = np.array(lag_object.transform_backward(func_num, hankel_coefs_imag, lag_functions))
+#     Fm_forward = Fm_real + 1j * Fm_imag
 
-
-    for i in range(len(x_dest)):
-        if abs(x_dest[i]) > 1e-4:
-            Fm_forward[i] /= (x_dest[i]**0.5)
+    mask = np.abs(x_dest) > 1e-4
+    Fm_forward[mask] = Fm_forward[mask] / x_dest[mask] ** 0.5
+    # for i in range(len(x_dest)):
+    #     if abs(x_dest[i]) > 1e-4:
+    #         Fm_forward[i] /= (x_dest[i]**0.5)
 
     Fm = Fm_forward * scale
 
@@ -125,7 +129,7 @@ def FBT_Laguerre(pol, m, x_dest, x_src, theta_net, func_num, scale=1, num_dots=2
 
 
 def FBT_Laguerre_fast(pol, m, x_dest, x_src, theta_net, func_num, scale=1, num_dots=2000,
-                      zeros=None, return_zeros=False):
+                      zeros=None, return_zeros=False, lag_functions=None):
     """
         compute formulas 10 and 11 from article
         Parameters:
@@ -140,6 +144,7 @@ def FBT_Laguerre_fast(pol, m, x_dest, x_src, theta_net, func_num, scale=1, num_d
 
     lag_object = Laguerre()
     func_scale = FunctionScale()
+
     if zeros is None:
         zeros = lag_object.laguerre_zeros(func_num+1, m)
 
@@ -152,22 +157,27 @@ def FBT_Laguerre_fast(pol, m, x_dest, x_src, theta_net, func_num, scale=1, num_d
     fm_hat = func_scale.func_sqrtx(x_src_multi_dot.copy(), fm_interp)
     gm_hat = func_scale.x_compress_function(x_src_multi_dot.copy(), fm_hat, scale)
 
-#     hankel_fast_coefs = lag_object.transform_forward_fast_x2sqrtx_laguerre_quad(zeros, func_num, m,
-#                                                                                 gm_hat, x_src_multi_dot)
-    hankel_fast_coefs_real = lag_object.transform_forward_fast_x2sqrtx_laguerre_quad(zeros, func_num, m,
-                                                                                np.real(gm_hat), x_src_multi_dot)
-    hankel_fast_coefs_imag = lag_object.transform_forward_fast_x2sqrtx_laguerre_quad(zeros, func_num, m,
-                                                                                np.imag(gm_hat), x_src_multi_dot)
+    # import time
+    # start = time.time()
+    hankel_fast_coefs = lag_object.transform_forward_fast_x2sqrtx_laguerre_quad(zeros, func_num, m,
+                                                                                gm_hat, x_src_multi_dot)
+    # print('time to fast coefs only: ', time.time() - start)
+#     hankel_fast_coefs_real = lag_object.transform_forward_fast_x2sqrtx_laguerre_quad(zeros, func_num, m,
+#                                                                                 np.real(gm_hat), x_src_multi_dot)
+#     hankel_fast_coefs_imag = lag_object.transform_forward_fast_x2sqrtx_laguerre_quad(zeros, func_num, m,
+#                                                                                 np.imag(gm_hat), x_src_multi_dot)
+    if lag_functions is None:
+        lag_functions = lag_object.create_functions_x2_2sqrtx(func_num, m, x_dest*scale, 1)
+    Fm = np.array(lag_object.transform_backward(func_num, hankel_fast_coefs, lag_functions))
+    # Fm_real = np.array(lag_object.transform_backward(func_num, hankel_fast_coefs_real, lag_functions))
+    # Fm_imag = np.array(lag_object.transform_backward(func_num, hankel_fast_coefs_imag, lag_functions))
+    # Fm = Fm_real + 1j * Fm_imag
 
-    lag_functions = lag_object.create_functions_x2_2sqrtx(func_num, m, x_dest*scale, 1)
-#     Fm = np.array(lag_object.transform_backward(func_num, hankel_fast_coefs, lag_functions))
-    Fm_real = np.array(lag_object.transform_backward(func_num, hankel_fast_coefs_real, lag_functions))
-    Fm_imag = np.array(lag_object.transform_backward(func_num, hankel_fast_coefs_imag, lag_functions))
-    Fm = Fm_real + 1j * Fm_imag
-
-    for i in range(len(x_dest)):
-        if abs(x_dest[i]) > 1e-4:
-            Fm[i] /= (x_dest[i])**0.5
+    mask = np.abs(x_dest) > 1e-4
+    Fm[mask] = Fm[mask] / x_dest[mask]**0.5
+    # for i in range(len(x_dest)):
+    #     if abs(x_dest[i]) > 1e-4:
+    #         Fm[i] /= (x_dest[i])**0.5
 
 #     fast_laguerre_hankel_F = Fm_forward #* scal
     Fm *= scale

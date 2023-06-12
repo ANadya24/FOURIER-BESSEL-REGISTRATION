@@ -194,16 +194,19 @@ class Laguerre:
         :return: восстановленная функция
         """
 
-        res = np.zeros(len(lag[0]), dtype='complex')
-
-        for n in range(numberOfFunctions):
-            if n % 2 == 1:
-                cur_coef = -coefs[n]
-            else:
-                cur_coef = coefs[n]
-
-            for x in range(len(lag[0])):
-                res[x] += cur_coef * lag[n][x]
+        # res = np.zeros(len(lag[0]), dtype='complex')
+        cur_coefs = coefs.copy()
+        cur_coefs[1::2] *= -1
+        res = (cur_coefs.reshape(-1, 1) * lag)
+        res = res.sum(axis=0)
+        # for n in range(numberOfFunctions):
+        #     if n % 2 == 1:
+        #         cur_coef = -coefs[n]
+        #     else:
+        #         cur_coef = coefs[n]
+        #
+        #     for x in range(len(lag[0])):
+        #         res[x] += cur_coef * lag[n][x]
         return res
 
     def lag_function(self, number, alpha, x):
@@ -313,7 +316,6 @@ class Laguerre:
 
     def transform_forward_fast_x2sqrtx_laguerre_quad(self, laguerre_zeros, n_coef, alpha, data, x):
         quadrature_order = len(laguerre_zeros)
-        # mu = np.zeros((n_coef, quadrature_order), dtype='complex')
 
         n_func = max(quadrature_order + 2, n_coef)
         functions = self.create_functions(n_func, alpha, laguerre_zeros, 1)
@@ -324,20 +326,9 @@ class Laguerre:
         mu = laguerre_zeros.reshape(1, quadrature_order) ** 0.75 * laguerre_func / \
              (ksi * ksi + 1e-7).reshape(1, -1)
 
-        # for j in range(n_coef):
-        #     # for i in range(quadrature_order):
-        #     mu[j] = laguerre_zeros ** 0.75 * laguerre_func[j] / (ksi * ksi + 1e-7)
-
         data_interpolated = np.zeros(quadrature_order, dtype='complex')
-
-        #         sqrtZeros = np.zeros(quadrature_order)
-        #         for i in range(quadrature_order):
-        #             sqrtZeros[i] = laguerre_zeros[i] ** 0.5
         sqrtZeros = laguerre_zeros ** 0.5
 
-        # from scipy.interpolate import interp1d
-        # func = interp1d(x, data)
-        # data_interpolated = func(sqrtZeros)
         index = 1
         for i in range(quadrature_order):
             while (index < len(data) - 1) and (x[index] <= sqrtZeros[i]):
@@ -347,13 +338,6 @@ class Laguerre:
                 data_interpolated[i] = ((x[index] - sqrtZeros[i]) * data[index - 1] + (
                         sqrtZeros[i] - x[index - 1]) * data[index]) / (x[index] - x[index - 1])
 
-        # laguerre_coeffs = np.zeros(n_coef, dtype='complex')
-        #
-        # for j in range(n_coef):
-        #     total_sum = (data_interpolated * mu[j]).sum()
-        #     # for i in range(quadrature_order):
-        #     #     total_sum += data_interpolated[i] * mu[quadrature_order * j + i]
-        #     laguerre_coeffs[j] = total_sum / (2 ** 0.5 * (quadrature_order + 1) * (quadrature_order + alpha + 1))
         laguerre_coeffs = (data_interpolated.reshape(1, quadrature_order) * mu).sum(axis=1) / \
                           (2 ** 0.5 * (quadrature_order + 1) * (quadrature_order + alpha + 1))
 

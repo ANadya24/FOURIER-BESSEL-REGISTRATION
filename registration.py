@@ -157,7 +157,7 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
     if 'polar_fixed' in additional_params:
         pol1 = additional_params['polar_fixed']
     else:
-        pol1 = polar_trfm(im1, int(np.round(2 * bandwidth)), int(np.round(2 * bandwidth / np.pi)), maxrad)
+        pol1 = polar_trfm(im1, int(2 * bandwidth), int(2 * bandwidth / np.pi), maxrad)
 
     if 'precomputed_fbt_fixed' in additional_params:
         Fm_arr = additional_params['precomputed_fbt_fixed']
@@ -222,7 +222,7 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
     if 'polar_moving' in additional_params:
         pol2 = additional_params['polar_moving']
     else:
-        pol2 = polar_trfm(im2, int(np.round(2 * bandwidth)), int(np.round(2 * bandwidth / np.pi)), maxrad)
+        pol2 = polar_trfm(im2, int(2 * bandwidth), int(2 * bandwidth / np.pi), maxrad)
 
     if 'precomputed_fbt_moving' in additional_params:
         Gm_arr = additional_params['precomputed_fbt_moving']

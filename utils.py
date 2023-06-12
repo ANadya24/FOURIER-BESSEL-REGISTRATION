@@ -14,7 +14,7 @@ def polar_trfm(Im, ntheta, nrad, rmax):
     #     deltarad = rmax/(nrad-1)
     theta_int = np.linspace(0, 2 * np.pi, ntheta)
     r_int = np.linspace(0, rmax, nrad)
-    theta, radius = np.meshgrid(theta_int, r_int)
+    # theta, radius = np.meshgrid(theta_int, r_int)
 
     def transform(coords):
         theta1 = 2.0 * np.pi * coords[1] / ntheta
@@ -44,7 +44,6 @@ def iou(im1, im2):
     inter = (im1 * im2).sum()
     union = (im1 | im2).sum()
     return inter / (union + 1e-7)
-
 
 
 def normalize_alpha(alpha, radians=True):

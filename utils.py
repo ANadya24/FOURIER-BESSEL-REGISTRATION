@@ -3,19 +3,14 @@ from scipy.ndimage import geometric_transform
 from skimage.transform import AffineTransform, warp
 
 
-def polar_trfm(Im, ntheta, nrad, rmax):
+def polar_trfm(Im, ntheta, nrad, rmax=None):
     # Polar Transform of the image with given numbers
     # of polar grid samples and maximal radius
     rows, cols = Im.shape
     cx = (rows + 1) / 2
     cy = (cols + 1) / 2
-    #     rmax=(rows-1)/2
-    #     deltatheta = 2 * np.pi/(ntheta)
-    #     deltarad = rmax/(nrad-1)
-    theta_int = np.linspace(0, 2 * np.pi, ntheta)
-    r_int = np.linspace(0, rmax, nrad)
-    # theta, radius = np.meshgrid(theta_int, r_int)
-
+    if rmax is None:
+        rmax = rows // 2
     def transform(coords):
         theta1 = 2.0 * np.pi * coords[1] / ntheta
         radius1 = rmax * coords[0] / nrad

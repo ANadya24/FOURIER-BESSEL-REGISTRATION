@@ -16,17 +16,21 @@ from fourier_bessel_transform import FBT, FBT_Laguerre, FBT_Laguerre_fast
 from laguerre import Laguerre
 
 
-def set_integration_intervals(bandwidth: int = 128,
+def set_integration_intervals(image_radius: int = 128,
                               pixel_sampling: float = 1., com_offset: float = 7.):
     '''
-    Init the bandwith B, displacement samples k
-    :param bandwidth: radius of the image
+    Init the image_radius A, displacement samples k
+    :param image_radius: radius of the image
     :param pixel_sampling:
     :param com_offset: maximum expected offset of COM (0.025 * image_diameter)
     :return:
     '''
 
-    image_radius = 2 * bandwidth * pixel_sampling / np.pi
+    # image_radius = 2 * bandwidth * pixel_sampling / np.pi
+    # image_radius = 128
+
+    print("============")
+    print(image_radius)
 
     # section 2.2.1: number of angular samples
     # to be used in formula 10, 11
@@ -34,10 +38,19 @@ def set_integration_intervals(bandwidth: int = 128,
 
     # section 2.2.1: number of radial samples
     # to be used in formula 10, 11
-    s_rad = 2 * bandwidth / np.pi
+    s_rad = s_ang / np.pi
+
+    bandwidth = s_ang / 2
+
+    # s_rad = 2 * bandwidth / np.pi
+
+    print("s_ang = {0}".format(s_ang))
+    print("s_rad = {0}".format(s_rad))
+    print("bandwidth = {0}".format(bandwidth))
 
     # maximum expected offset of COM
     # displacement samples k
+    # com_offset is rho_max in the paper
     k = com_offset / pixel_sampling
     b = com_offset / 2
 
@@ -64,7 +77,7 @@ def set_integration_intervals(bandwidth: int = 128,
     omega_net = np.linspace(-np.pi, np.pi, len(Imm))
     psi_net = np.linspace(-np.pi, np.pi, int(4 * b * bandwidth / image_radius))
     eta_net = np.linspace(-np.pi, np.pi, int(4 * b * bandwidth / (np.pi * image_radius)))
-    return Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b
+    return Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth
 
 
 def laguerre_functions_precompute(alphas: List[int],
@@ -134,7 +147,7 @@ def laguerre_zeros_precompute(alphas: List[int], lag_func_num: int = 40, abort_a
 
 
 def fbm_registration(im1: np.ndarray, im2: np.ndarray,
-                     bandwidth: int = 128, p_s: float = 2., com_offset: int = 14,
+                     image_radius: int = 128, p_s: float = 2., com_offset: int = 14,
                      method: str = 'fbm', lag_func_num: int = 40, lag_scale: float = 3, lag_num_dots: int = 2000,
                      shift_by_mask: bool = False, masks: List[np.ndarray] = None,
                      additional_params: Optional[Dict[str, Any]] = None):
@@ -144,15 +157,16 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
     assert method in ['fbm', 'fbm_laguerre', 'fast_fbm_laguerre'], 'Choose one of the set options for the method!'
 
     if 'integration_intervals' in additional_params:
-        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b \
+        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth \
             = additional_params['integration_intervals']
     else:
-        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b = \
-            set_integration_intervals(bandwidth, p_s, com_offset)
+        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth = \
+            set_integration_intervals(image_radius, p_s, com_offset)
 
-    maxrad = im1.shape[0] ** 2 + im1.shape[1] ** 2
-    maxrad **= 0.5
-    maxrad = np.ceil(maxrad).astype(int)
+    # maxrad = im1.shape[0] ** 2 + im1.shape[1] ** 2
+    # maxrad **= 0.5
+    # maxrad = np.ceil(maxrad).astype(int)
+    maxrad = image_radius
 
     if 'polar_fixed' in additional_params:
         pol1 = additional_params['polar_fixed']

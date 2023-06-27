@@ -82,9 +82,9 @@ def set_integration_intervals(image_radius: int = 128,
     bound_h1 = np.floor(2 * b * bandwidth / (np.pi * image_radius))
     bound_mm = np.round(bandwidth)
 
-    Im1 = np.arange(-bound_m1, bound_m1, dtype='int32')
-    Ih1 = np.arange(-bound_h1, bound_h1, dtype='int32')
-    Imm = np.arange(0, bound_mm, dtype='int32')
+    m1_net = np.arange(-bound_m1, bound_m1, dtype='int32')
+    h1_net = np.arange(-bound_h1, bound_h1, dtype='int32')
+    mm_net = np.arange(0, bound_mm, dtype='int32')
 
     # Grid of angles for formula 10, 11, grid of x parameter
 
@@ -93,10 +93,10 @@ def set_integration_intervals(image_radius: int = 128,
     x_net = np.linspace(0, bandwidth / image_radius, int(s_rad))
 
     # final parameters of motion
-    omega_net = np.linspace(-np.pi, np.pi, len(Imm))
-    psi_net = np.linspace(-np.pi, np.pi, int(4 * b * bandwidth / image_radius))
+    omega_net = np.linspace(-np.pi, np.pi, len(mm_net))
+    ksi_net = np.linspace(-np.pi, np.pi, int(4 * b * bandwidth / image_radius))
     eta_net = np.linspace(-np.pi, np.pi, int(4 * b * bandwidth / (np.pi * image_radius)))
-    return Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth
+    return m1_net, h1_net, mm_net, theta_net, u_net, x_net, omega_net, ksi_net, eta_net, eps, b, bandwidth
 
 
 def laguerre_functions_precompute(alphas: List[int],
@@ -176,10 +176,10 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
     assert method in ['fbm', 'fbm_laguerre', 'fast_fbm_laguerre'], 'Choose one of the set options for the method!'
 
     if 'integration_intervals' in additional_params:
-        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth \
+        m1_net, h1_net, mm_net, theta_net, u_net, x_net, omega_net, ksi_net, eta_net, eps, b, bandwidth \
             = additional_params['integration_intervals']
     else:
-        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth = \
+        m1_net, h1_net, mm_net, theta_net, u_net, x_net, omega_net, ksi_net, eta_net, eps, b, bandwidth = \
             set_integration_intervals(image_radius, p_s, com_offset)
 
     # maxrad = im1.shape[0] ** 2 + im1.shape[1] ** 2
@@ -199,12 +199,12 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
         Fm_arr = additional_params['precomputed_fbt_fixed']
     else:
         alphas = []
-        for it_m1 in range(len(Im1)):
-            m1 = Im1[it_m1]
-            for it_h1 in range(len(Ih1)):
-                h1 = Ih1[it_h1]
-                for it_mm in range(len(Imm)):
-                    mm = Imm[it_mm]
+        for it_m1 in range(len(m1_net)):
+            m1 = m1_net[it_m1]
+            for it_h1 in range(len(h1_net)):
+                h1 = h1_net[it_h1]
+                for it_mm in range(len(mm_net)):
+                    mm = mm_net[it_mm]
                     if m1 + h1 + mm in alphas:
                         continue
                     alphas.append(m1 + h1 + mm)
@@ -221,9 +221,9 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
     if 'precomputed_c1_coefs' in additional_params:
         c1_coefs = additional_params['precomputed_c1_coefs']
     else:
-        c1_coefs = np.zeros((len(Im1), len(x_net)))
-        for it_m1 in range(len(Im1)):
-            m1 = Im1[it_m1]
+        c1_coefs = np.zeros((len(m1_net), len(x_net)))
+        for it_m1 in range(len(m1_net)):
+            m1 = m1_net[it_m1]
             c1 = sp.special.jv(m1, b * x_net) * x_net
             c1_coefs[it_m1, :] = c1
             # plt.figure
@@ -235,10 +235,10 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
     if 'precomputed_c2_coefs' in additional_params:
         c2_coefs = additional_params['precomputed_c2_coefs']
     else:
-        c2_coefs = np.zeros((len(Ih1), len(x_net)))
-        for it_m1 in range(len(Im1)):
-            for it_h1 in range(len(Ih1)):
-                h1 = Ih1[it_h1]
+        c2_coefs = np.zeros((len(h1_net), len(x_net)))
+        for it_m1 in range(len(m1_net)):
+            for it_h1 in range(len(h1_net)):
+                h1 = h1_net[it_h1]
                 if it_m1 == 0:
                     c2 = sp.special.jv(h1, b * x_net)
                     c2_coefs[it_h1, :] = c2
@@ -258,7 +258,7 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
             (im2.shape[1], im2.shape[0])
         )
 
-    Tf = np.zeros((len(Im1), len(Ih1), len(Imm)), dtype='complex')
+    Tf = np.zeros((len(m1_net), len(h1_net), len(mm_net)), dtype='complex')
 
     if 'polar_moving' in additional_params:
         pol2 = additional_params['polar_moving']
@@ -272,18 +272,18 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
         Gm_arr = additional_params['precomputed_fbt_moving']
     else:
         # print('Gm precompute')
-        Gm_arr = image_fbt_precompute(pol2, Imm, theta_net, u_net, x_net, method,
+        Gm_arr = image_fbt_precompute(pol2, mm_net, theta_net, u_net, x_net, method,
                                       lag_func_num, lag_scale, lag_num_dots,
                                       additional_params)
 
-    for it_m1 in range(len(Im1)):
+    for it_m1 in range(len(m1_net)):
         c1 = c1_coefs[it_m1, :]
-        m1 = Im1[it_m1]
-        for it_h1 in range(len(Ih1)):
-            h1 = Ih1[it_h1]
+        m1 = m1_net[it_m1]
+        for it_h1 in range(len(h1_net)):
+            h1 = h1_net[it_h1]
             c2 = c2_coefs[it_h1, :] * c1
-            for it_mm in range(len(Imm)):
-                mm = Imm[it_mm]
+            for it_mm in range(len(mm_net)):
+                mm = mm_net[it_mm]
                 coef = 2 * np.pi * np.exp(1j * (h1 + mm) * eps)
                 Fm = Fm_arr[m1 + h1 + mm]
                 Gm = Gm_arr[mm]
@@ -292,13 +292,13 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
                 Tf[it_m1, it_h1, it_mm] *= coef
 
     T = np.fft.ifftn(Tf)
-    [ipsi, ietta, iomegga] = np.unravel_index(np.argmax(T), Tf.shape)
+    [iksi, ieta, iomega] = np.unravel_index(np.argmax(T), Tf.shape)
 
-    psi = psi_net[ipsi]
-    etta = eta_net[ietta]
-    omegga = omega_net[iomegga]
+    ksi = ksi_net[iksi]
+    eta = eta_net[ieta]
+    omega = omega_net[iomega]
 
-    result = {'psi': psi, 'etta': etta, 'omegga': omegga, 'com_offset': com_offset / 2, 'eps': eps}
+    result = {'ksi': ksi, 'eta': eta, 'omega': omega, 'com_offset': com_offset / 2, 'eps': eps}
     if shift_by_mask:
         result['center_shift'] = mat_shift_vec
 
@@ -306,25 +306,25 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
 
 
 def apply_transform2(image, transform_dict):
-    psi = transform_dict['psi']
-    etta_prime = transform_dict['etta']
-    omegga_prime = transform_dict['omegga']
+    ksi = transform_dict['ksi']
+    eta_prime = transform_dict['eta']
+    omega_prime = transform_dict['omega']
     eps = transform_dict['eps']
     com_offset = transform_dict['com_offset']
 
-    etta = etta_prime - psi
-    omegga = omegga_prime - etta_prime
+    eta = eta_prime - ksi
+    omega = omega_prime - eta_prime
 
     h, w = image.shape[:2]
     center = [w // 2, h // 2]
 
     mat_trans_center = get_translation_mat(*center)
-    mat_rot_psi = get_rotation_mat(np.pi - psi, radians=True)
-    mat_rot_etta = get_rotation_mat(np.pi - etta, radians=True)
-    mat_rot_omaga = get_rotation_mat(np.pi - omegga, radians=True)
+    mat_rot_ksi = get_rotation_mat(np.pi - ksi, radians=True)
+    mat_rot_eta = get_rotation_mat(np.pi - eta, radians=True)
+    mat_rot_omaga = get_rotation_mat(np.pi - omega, radians=True)
     mat_trans_b = get_translation_mat(-com_offset / 2, 0)
 
-    mat_all = mat_trans_center @ mat_rot_psi @ mat_trans_b @ mat_rot_etta @ mat_trans_b @ mat_rot_omaga @ mat_inv(mat_trans_center)
+    mat_all = mat_trans_center @ mat_rot_ksi @ mat_trans_b @ mat_rot_eta @ mat_trans_b @ mat_rot_omaga @ mat_inv(mat_trans_center)
 
     final_image = cv2.warpAffine(
         image, get_mat_2x3(mat_all),
@@ -335,19 +335,19 @@ def apply_transform2(image, transform_dict):
 
 
 def apply_transform1(image, transform_dict):
-    psi = transform_dict['psi']
-    etta_prime = transform_dict['etta']
-    omegga_prime = transform_dict['omegga']
+    ksi = transform_dict['ksi']
+    eta_prime = transform_dict['eta']
+    omega_prime = transform_dict['omega']
     eps = transform_dict['eps']
     com_offset = transform_dict['com_offset']
 
-    etta = etta_prime - psi
-    omegga = omegga_prime - etta_prime
+    eta = eta_prime - ksi
+    omega = omega_prime - eta_prime
 
-    phi_1 = psi
-    phi_2 = etta + eps
+    phi_1 = ksi
+    phi_2 = eta + eps
     psi_1 = 0
-    psi_2 = omegga
+    psi_2 = omega
     rho_1 = com_offset / 2.0
     rho_2 = com_offset / 2.0
 
@@ -368,14 +368,14 @@ def apply_transform(image, transform_dict, center=None, verbose=False):
     h, w = image.shape[:2]
     if center is None:
         center = [w // 2, h // 2]
-    psi = transform_dict['psi']
-    etta_prime = transform_dict['etta']
-    omegga_prime = transform_dict['omegga']
+    ksi = transform_dict['ksi']
+    eta_prime = transform_dict['eta']
+    omega_prime = transform_dict['omega']
     eps = transform_dict['eps']
     com_offset = transform_dict['com_offset']
 
-    etta = etta_prime - psi
-    omegga = omegga_prime - etta_prime
+    eta = eta_prime - ksi
+    omega = omega_prime - eta_prime
 
     if 'center_shift' in transform_dict:
         image_shifted = cv2.warpAffine(
@@ -386,10 +386,10 @@ def apply_transform(image, transform_dict, center=None, verbose=False):
         image_shifted = image
 
     mat_trans_center = get_translation_mat(*center)
-    mat_rot_psi = get_rotation_mat(normalize_alpha(psi), radians=True)
+    mat_rot_ksi = get_rotation_mat(normalize_alpha(ksi), radians=True)
     mat_trans_b = get_translation_mat(com_offset / 2, 0)
 
-    mat_o_p = mat_trans_b @ mat_trans_center @ mat_rot_psi @ mat_inv(mat_trans_b)
+    mat_o_p = mat_trans_b @ mat_trans_center @ mat_rot_ksi @ mat_inv(mat_trans_b)
 
     P_coords = get_mat_2x3(mat_o_p) @ np.array([0, 0, 1])
 
@@ -397,10 +397,10 @@ def apply_transform(image, transform_dict, center=None, verbose=False):
         print('P_coords', P_coords)
 
     mat_trans_p = get_translation_mat(P_coords[0], P_coords[1])
-    mat_rot_etta = get_rotation_mat(normalize_alpha(etta), True)
+    mat_rot_eta = get_rotation_mat(normalize_alpha(eta), True)
     mat_trans_b = get_translation_mat(com_offset, 0)
 
-    mat_trans_r = mat_inv(mat_trans_b) @ mat_trans_p @ mat_rot_etta @ mat_trans_b
+    mat_trans_r = mat_inv(mat_trans_b) @ mat_trans_p @ mat_rot_eta @ mat_trans_b
 
     O_coords = get_mat_2x3(mat_trans_r) @ np.array([0, 0, 1])
     shift_vec = [O_coords[0] - center[0], O_coords[1] - center[1]]
@@ -418,10 +418,10 @@ def apply_transform(image, transform_dict, center=None, verbose=False):
         plt.scatter(*O_coords)
 
     mat_trans_o = get_translation_mat(*O_coords)
-    mat_rot_omegga = get_rotation_mat(normalize_alpha(omegga + eps),
+    mat_rot_omega = get_rotation_mat(normalize_alpha(omega + eps),
                                       radians=True)
 
-    mat_trans_rot = mat_trans_o @ mat_rot_omegga @ mat_inv(mat_trans_o)
+    mat_trans_rot = mat_trans_o @ mat_rot_omega @ mat_inv(mat_trans_o)
 
     final_image = cv2.warpAffine(
         im_shifted_o, get_mat_2x3(mat_trans_rot),

@@ -12,7 +12,9 @@ from utils import polar_trfm, normalize_alpha
 from matrix_utils import (
     get_translation_mat,
     get_mat_2x3,
-    get_rotation_mat, mat_inv
+    get_rotation_mat, mat_inv,
+    warp_img,
+    show_img_ovl
 )
 from fourier_bessel_transform import FBT, FBT_Laguerre, FBT_Laguerre_fast
 from laguerre import Laguerre
@@ -36,20 +38,17 @@ def rotate(im, angle, radians=False, center=None):
 
 
 def set_integration_intervals(image_radius: int = 128,
-                              pixel_sampling: float = 1., com_offset: float = 7.):
+                              pixel_sampling: float = 1., rho_max: float = 7.):
     '''
     Init the bandwith B, displacement samples k
-    :param bandwidth: radius of the image
+    :param image_radius: radius of the image
     :param pixel_sampling:
-    :param com_offset: maximum expected offset of COM (0.025 * image_diameter)
+    :param rho_max: maximum expected offset of COM (0.025 * image_diameter)
     :return:
     '''
 
     # image_radius = 2 * bandwidth * pixel_sampling / np.pi
     # image_radius = 128
-
-    print("============")
-    print(image_radius)
 
     # section 2.2.1: number of angular samples
     # to be used in formula 10, 11
@@ -69,17 +68,20 @@ def set_integration_intervals(image_radius: int = 128,
 
     # maximum expected offset of COM
     # displacement samples k
-    # com_offset is rho_max in the paper
-    k = com_offset / pixel_sampling
-    b = com_offset / 2
+    # pho_max is rho_max in the paper
+    k = rho_max / pixel_sampling
+    b = rho_max / 2
 
     # small value to avoid duplications
     eps = np.pi / (2 * k)
 
     # bandwiths maximum abs values of m1,h1,mm
 
-    bound_m1 = np.floor(2 * b * bandwidth / image_radius)
-    bound_h1 = np.floor(2 * b * bandwidth / (np.pi * image_radius))
+    s_ksi = np.pi * k
+    s_eta = k
+
+    bound_m1 = np.floor(s_ksi / 2.0)
+    bound_h1 = np.floor(s_eta / 2.0)
     bound_mm = np.round(bandwidth)
 
     m1_net = np.arange(-bound_m1, bound_m1, dtype='int32')
@@ -93,9 +95,9 @@ def set_integration_intervals(image_radius: int = 128,
     x_net = np.linspace(0, bandwidth / image_radius, int(s_rad))
 
     # final parameters of motion
+    ksi_net = np.linspace(-np.pi, np.pi, len(m1_net))
+    eta_net = np.linspace(-np.pi, np.pi, len(h1_net))
     omega_net = np.linspace(-np.pi, np.pi, len(mm_net))
-    ksi_net = np.linspace(-np.pi, np.pi, int(4 * b * bandwidth / image_radius))
-    eta_net = np.linspace(-np.pi, np.pi, int(4 * b * bandwidth / (np.pi * image_radius)))
     return m1_net, h1_net, mm_net, theta_net, u_net, x_net, omega_net, ksi_net, eta_net, eps, b, bandwidth
 
 
@@ -166,7 +168,7 @@ def laguerre_zeros_precompute(alphas: List[int], lag_func_num: int = 40, abort_a
 
 
 def fbm_registration(im1: np.ndarray, im2: np.ndarray,
-                     image_radius: int = 128, p_s: float = 2., com_offset: int = 14,
+                     image_radius: int = 128, p_s: float = 2., pho_max: int = 14,
                      method: str = 'fbm', lag_func_num: int = 40, lag_scale: float = 3, lag_num_dots: int = 2000,
                      shift_by_mask: bool = False, masks: List[np.ndarray] = None,
                      additional_params: Optional[Dict[str, Any]] = None):
@@ -180,7 +182,7 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
             = additional_params['integration_intervals']
     else:
         m1_net, h1_net, mm_net, theta_net, u_net, x_net, omega_net, ksi_net, eta_net, eps, b, bandwidth = \
-            set_integration_intervals(image_radius, p_s, com_offset)
+            set_integration_intervals(image_radius, p_s, pho_max)
 
     # maxrad = im1.shape[0] ** 2 + im1.shape[1] ** 2
     # maxrad **= 0.5
@@ -298,7 +300,7 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
     eta = eta_net[ieta]
     omega = omega_net[iomega]
 
-    result = {'ksi': ksi, 'eta': eta, 'omega': omega, 'com_offset': com_offset / 2, 'eps': eps}
+    result = {'ksi': ksi, 'eta': eta, 'omega': omega, 'pho_max': pho_max / 2, 'eps': eps}
     if shift_by_mask:
         result['center_shift'] = mat_shift_vec
 
@@ -310,7 +312,7 @@ def apply_transform2(image, transform_dict):
     eta_prime = transform_dict['eta']
     omega_prime = transform_dict['omega']
     eps = transform_dict['eps']
-    com_offset = transform_dict['com_offset']
+    pho_max = transform_dict['pho_max']
 
     eta = eta_prime - ksi
     omega = omega_prime - eta_prime
@@ -322,7 +324,7 @@ def apply_transform2(image, transform_dict):
     mat_rot_ksi = get_rotation_mat(np.pi - ksi, radians=True)
     mat_rot_eta = get_rotation_mat(np.pi - eta, radians=True)
     mat_rot_omaga = get_rotation_mat(np.pi - omega, radians=True)
-    mat_trans_b = get_translation_mat(-com_offset / 2, 0)
+    mat_trans_b = get_translation_mat(-pho_max / 2, 0)
 
     mat_all = mat_trans_center @ mat_rot_ksi @ mat_trans_b @ mat_rot_eta @ mat_trans_b @ mat_rot_omaga @ mat_inv(mat_trans_center)
 
@@ -339,7 +341,7 @@ def apply_transform1(image, transform_dict):
     eta_prime = transform_dict['eta']
     omega_prime = transform_dict['omega']
     eps = transform_dict['eps']
-    com_offset = transform_dict['com_offset']
+    pho_max = transform_dict['pho_max']
 
     eta = eta_prime - ksi
     omega = omega_prime - eta_prime
@@ -348,20 +350,37 @@ def apply_transform1(image, transform_dict):
     phi_2 = eta + eps
     psi_1 = 0
     psi_2 = omega
-    rho_1 = com_offset / 2.0
-    rho_2 = com_offset / 2.0
+    rho_1 = pho_max / 2.0
+    rho_2 = pho_max / 2.0
 
     t_x = rho_1 * math.cos(phi_1) + rho_2 * math.cos(phi_1 + phi_2 + psi_1)
     t_y = rho_1 * math.sin(phi_1) + rho_2 * math.sin(phi_1 + phi_2 + psi_1)
     t = [t_x, t_y]
 
-    angle = np.pi-(phi_1 + phi_2 + psi_1 + psi_2)
-    # angle = (phi_1 + phi_2 + psi_1 + psi_2)
+    # angle = np.pi-(phi_1 + phi_2 + psi_1 + psi_2)
+    angle = (phi_1 + phi_2 + psi_1 + psi_2)
 
-    final_image_rot = rotate(image, angle, True)
-    final_image = shift(final_image_rot, [t_x, t_y])
+    h, w = image.shape[:2]
+    center = [w // 2, h // 2]
+    trans_mat_center = get_translation_mat(-center[0], -center[1])
+    trans_mat = get_translation_mat(t_x, t_y)
+    rot_mat = get_rotation_mat(angle, True)
 
-    return final_image, final_image_rot, t, angle
+    # 
+    warp_mat_1 = mat_inv(trans_mat_center) @ rot_mat @ trans_mat_center
+    im2_1 = warp_img(image, warp_mat_1)
+    # show_img_ovl(image, im2_1)
+    print('warp_mat_1')
+    print(trans_mat_center @ warp_mat_1 @ mat_inv(trans_mat_center))
+
+    #
+    warp_mat_2 = mat_inv(trans_mat_center) @ trans_mat @ rot_mat @ trans_mat_center
+    im2_2 = warp_img(image, warp_mat_2)
+    # show_img_ovl(image, im2_2)
+    print('warp_mat_2')
+    print(trans_mat_center @ warp_mat_2 @ mat_inv(trans_mat_center))
+
+    return im2_2, im2_1, t, angle
 
 
 def apply_transform(image, transform_dict, center=None, verbose=False):
@@ -372,7 +391,7 @@ def apply_transform(image, transform_dict, center=None, verbose=False):
     eta_prime = transform_dict['eta']
     omega_prime = transform_dict['omega']
     eps = transform_dict['eps']
-    com_offset = transform_dict['com_offset']
+    pho_max = transform_dict['pho_max']
 
     eta = eta_prime - ksi
     omega = omega_prime - eta_prime
@@ -387,7 +406,7 @@ def apply_transform(image, transform_dict, center=None, verbose=False):
 
     mat_trans_center = get_translation_mat(*center)
     mat_rot_ksi = get_rotation_mat(normalize_alpha(ksi), radians=True)
-    mat_trans_b = get_translation_mat(com_offset / 2, 0)
+    mat_trans_b = get_translation_mat(pho_max / 2, 0)
 
     mat_o_p = mat_trans_b @ mat_trans_center @ mat_rot_ksi @ mat_inv(mat_trans_b)
 
@@ -398,7 +417,7 @@ def apply_transform(image, transform_dict, center=None, verbose=False):
 
     mat_trans_p = get_translation_mat(P_coords[0], P_coords[1])
     mat_rot_eta = get_rotation_mat(normalize_alpha(eta), True)
-    mat_trans_b = get_translation_mat(com_offset, 0)
+    mat_trans_b = get_translation_mat(pho_max, 0)
 
     mat_trans_r = mat_inv(mat_trans_b) @ mat_trans_p @ mat_rot_eta @ mat_trans_b
 

@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.ndimage as nd
+import cv2
 
 inference_size = 1024
 
@@ -93,3 +94,43 @@ def pad_images_np(source, target):
     padding_source = ((new_shape[0]-source.shape[0]) / 2, (new_shape[1]-source.shape[1]) / 2)
     padding_target = ((new_shape[0]-target.shape[0]) / 2, (new_shape[1]-target.shape[1]) / 2)
     return padded_source, padded_target, padding_source, padding_target
+
+
+def downsample_image(image, downsample_ratio):
+    gaussian_sigma = downsample_ratio / 3.25
+    smoothed_image = nd.gaussian_filter(image, gaussian_sigma)
+    y_size, x_size = image.shape
+    new_y_size, new_x_size = int(y_size / downsample_ratio), int(x_size / downsample_ratio)
+    grid_x, grid_y = np.meshgrid(np.arange(new_x_size), np.arange(new_y_size))
+    grid_x = grid_x * (x_size / new_x_size)
+    grid_y = grid_y * (y_size / new_y_size)
+    resampled_image = nd.map_coordinates(smoothed_image, [grid_y, grid_x], cval=0, order=3)
+    return resampled_image
+
+
+def shift(im, vec):
+    mat_trans = get_translation_mat(*vec)
+    return cv2.warpAffine(im, get_mat_2x3(mat_trans), 
+                          (im.shape[1], im.shape[0]))
+    
+    
+def rotate(im, angle, center=None):
+    h, w = im.shape[:2]
+    if center is None:
+        center = np.array([w // 2, h // 2])
+    mat_trans_minus_center = get_translation_mat(-center[0], -center[1])
+    mat_rot = get_rotation_mat(angle, radians=True)
+    mat_trans_center = get_translation_mat(*center)
+    return cv2.warpAffine(im, get_mat_2x3(mat_trans_center @ mat_rot @ mat_trans_minus_center),
+                          (im.shape[1], im.shape[0]))
+
+
+def show_img_ovl(im1, im2):
+    plt.figure()
+    plt.imshow(np.stack([im1, im2, im2*0], -1))
+
+
+def warp_img(im, warp_mat):
+    return cv2.warpAffine(
+        im, get_mat_2x3(warp_mat),
+        (im.shape[1], im.shape[0]))

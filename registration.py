@@ -5,6 +5,8 @@ import cv2
 import scipy as sp
 from tqdm import tqdm
 from matplotlib import pyplot as plt
+import math
+import time
 
 from utils import polar_trfm, normalize_alpha
 from matrix_utils import (
@@ -14,6 +16,23 @@ from matrix_utils import (
 )
 from fourier_bessel_transform import FBT, FBT_Laguerre, FBT_Laguerre_fast
 from laguerre import Laguerre
+
+
+def shift(im, vec):
+    mat_trans = get_translation_mat(*vec)
+    return cv2.warpAffine(im, get_mat_2x3(mat_trans), 
+                          (im.shape[1], im.shape[0]))
+    
+    
+def rotate(im, angle, radians=False, center=None):
+    h, w = im.shape[:2]
+    if center is None:
+        center = np.array([w // 2, h // 2])
+    mat_trans_minus_center = get_translation_mat(-center[0], -center[1])
+    mat_rot = get_rotation_mat(angle, radians)
+    mat_trans_center = get_translation_mat(*center)
+    return cv2.warpAffine(im, get_mat_2x3(mat_trans_center @ mat_rot @ mat_trans_minus_center),
+                          (im.shape[1], im.shape[0]))
 
 
 def set_integration_intervals(image_radius: int = 128,
@@ -207,6 +226,11 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
             m1 = Im1[it_m1]
             c1 = sp.special.jv(m1, b * x_net) * x_net
             c1_coefs[it_m1, :] = c1
+            # plt.figure
+            # plt.plot(x_net, c1, )
+            # plt.title('m1={0}'.format(m1))
+            # plt.show()
+            # time.sleep(3)
 
     if 'precomputed_c2_coefs' in additional_params:
         c2_coefs = additional_params['precomputed_c2_coefs']
@@ -281,15 +305,77 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
     return result
 
 
+def apply_transform2(image, transform_dict):
+    psi = transform_dict['psi']
+    etta_prime = transform_dict['etta']
+    omegga_prime = transform_dict['omegga']
+    eps = transform_dict['eps']
+    com_offset = transform_dict['com_offset']
+
+    etta = etta_prime - psi
+    omegga = omegga_prime - etta_prime
+
+    h, w = image.shape[:2]
+    center = [w // 2, h // 2]
+
+    mat_trans_center = get_translation_mat(*center)
+    mat_rot_psi = get_rotation_mat(np.pi - psi, radians=True)
+    mat_rot_etta = get_rotation_mat(np.pi - etta, radians=True)
+    mat_rot_omaga = get_rotation_mat(np.pi - omegga, radians=True)
+    mat_trans_b = get_translation_mat(-com_offset / 2, 0)
+
+    mat_all = mat_trans_center @ mat_rot_psi @ mat_trans_b @ mat_rot_etta @ mat_trans_b @ mat_rot_omaga @ mat_inv(mat_trans_center)
+
+    final_image = cv2.warpAffine(
+        image, get_mat_2x3(mat_all),
+        (image.shape[1], image.shape[0]))
+
+
+    return final_image
+
+
+def apply_transform1(image, transform_dict):
+    psi = transform_dict['psi']
+    etta_prime = transform_dict['etta']
+    omegga_prime = transform_dict['omegga']
+    eps = transform_dict['eps']
+    com_offset = transform_dict['com_offset']
+
+    etta = etta_prime - psi
+    omegga = omegga_prime - etta_prime
+
+    phi_1 = psi
+    phi_2 = etta + eps
+    psi_1 = 0
+    psi_2 = omegga
+    rho_1 = com_offset / 2.0
+    rho_2 = com_offset / 2.0
+
+    t_x = rho_1 * math.cos(phi_1) + rho_2 * math.cos(phi_1 + phi_2 + psi_1)
+    t_y = rho_1 * math.sin(phi_1) + rho_2 * math.sin(phi_1 + phi_2 + psi_1)
+    t = [t_x, t_y]
+
+    angle = np.pi-(phi_1 + phi_2 + psi_1 + psi_2)
+    # angle = (phi_1 + phi_2 + psi_1 + psi_2)
+
+    final_image_rot = rotate(image, angle, True)
+    final_image = shift(final_image_rot, [t_x, t_y])
+
+    return final_image, final_image_rot, t, angle
+
+
 def apply_transform(image, transform_dict, center=None, verbose=False):
     h, w = image.shape[:2]
     if center is None:
         center = [w // 2, h // 2]
     psi = transform_dict['psi']
-    etta = transform_dict['etta']
-    omegga = transform_dict['omegga']
+    etta_prime = transform_dict['etta']
+    omegga_prime = transform_dict['omegga']
     eps = transform_dict['eps']
     com_offset = transform_dict['com_offset']
+
+    etta = etta_prime - psi
+    omegga = omegga_prime - etta_prime
 
     if 'center_shift' in transform_dict:
         image_shifted = cv2.warpAffine(
@@ -301,7 +387,7 @@ def apply_transform(image, transform_dict, center=None, verbose=False):
 
     mat_trans_center = get_translation_mat(*center)
     mat_rot_psi = get_rotation_mat(normalize_alpha(psi), radians=True)
-    mat_trans_b = get_translation_mat(com_offset, 0)
+    mat_trans_b = get_translation_mat(com_offset / 2, 0)
 
     mat_o_p = mat_trans_b @ mat_trans_center @ mat_rot_psi @ mat_inv(mat_trans_b)
 

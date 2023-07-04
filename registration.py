@@ -63,9 +63,10 @@ def set_integration_intervals(image_radius: int = 128,
     bound_h1 = np.floor(2 * b * bandwidth / (np.pi * image_radius))
     bound_mm = np.round(bandwidth)
 
-    Im1 = np.arange(-bound_m1, bound_m1, dtype='int32')
-    Ih1 = np.arange(-bound_h1, bound_h1, dtype='int32')
-    Imm = np.arange(0, bound_mm, dtype='int32')
+    Im1 = np.arange(-bound_m1, bound_m1+1, dtype='int32')
+    Ih1 = np.arange(-bound_h1, bound_h1+1, dtype='int32')
+    Imm = np.arange(0, bound_mm+1, dtype='int32')
+    print('len(Im1)', len(Im1), 'len(Ih1)', len(Ih1), 'len(Imm)', len(Imm))
 
     # Grid of angles for formula 10, 11, grid of x parameter
 
@@ -74,10 +75,13 @@ def set_integration_intervals(image_radius: int = 128,
     x_net = np.linspace(0, bandwidth / image_radius, int(s_rad))
 
     # final parameters of motion
-    omega_net = np.linspace(-np.pi, np.pi, len(Imm))
-    psi_net = np.linspace(-np.pi, np.pi, int(4 * b * bandwidth / image_radius))
-    eta_net = np.linspace(-np.pi, np.pi, int(4 * b * bandwidth / (np.pi * image_radius)))
-    return Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth
+
+    omega_net = np.linspace(0, 2 * np.pi, len(Imm))
+    # psi_net = np.linspace(-np.pi, np.pi, int(4 * b * bandwidth / image_radius))
+    # eta_net = np.linspace(-np.pi, np.pi, int(4 * b * bandwidth / (np.pi * image_radius)))
+    ksi_net = np.linspace(0, 2 * np.pi, len(Im1)) #int(np.pi * k))
+    eta_net = np.linspace(0, 2 * np.pi,len(Ih1)) #int(k))
+    return Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, ksi_net, eta_net, eps, b, bandwidth
 
 
 def laguerre_functions_precompute(alphas: List[int],
@@ -157,10 +161,10 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
     assert method in ['fbm', 'fbm_laguerre', 'fast_fbm_laguerre'], 'Choose one of the set options for the method!'
 
     if 'integration_intervals' in additional_params:
-        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth \
+        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, ksi_net, eta_net, eps, b, bandwidth \
             = additional_params['integration_intervals']
     else:
-        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth = \
+        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, ksi_net, eta_net, eps, b, bandwidth = \
             set_integration_intervals(image_radius, p_s, com_offset)
 
     # maxrad = im1.shape[0] ** 2 + im1.shape[1] ** 2
@@ -258,20 +262,21 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
                 Fm = Fm_arr[m1 + h1 + mm]
                 Gm = Gm_arr[mm]
                 func = Fm * np.conj(Gm) * c2
-                Tf[it_m1, it_h1, it_mm] = np.trapz(func, x_net) - 1j * np.trapz(np.imag(func), x_net)
+                Tf[it_m1, it_h1, it_mm] = np.trapz(func, x_net)
                 Tf[it_m1, it_h1, it_mm] *= coef
 
-    T = np.fft.ifftn(Tf)
-    [ipsi, ietta, iomegga] = np.unravel_index(np.argmax(T), Tf.shape)
+    T = np.fft.ifftn(np.fft.ifftshift(Tf))
+    [iksi, ietta, iomegga] = np.unravel_index(np.argmax(T), Tf.shape)
 
-    psi = psi_net[ipsi]
+    ksi = ksi_net[iksi]
     etta = eta_net[ietta]
     omegga = omega_net[iomegga]
 
-    result = {'psi': psi, 'etta': etta, 'omegga': omegga, 'com_offset': com_offset / 2, 'eps': eps}
+    result = {'ksi': ksi, 'etta': etta, 'omegga': omegga, 'com_offset': com_offset / 2, 'eps': eps}
     if shift_by_mask:
         result['center_shift'] = mat_shift_vec
-
+    result['indices'] = iksi, ietta, iomegga
+    result['corr'] = T
     return result
 
 
@@ -279,7 +284,7 @@ def apply_transform(image, transform_dict, center=None, verbose=False):
     h, w = image.shape[:2]
     if center is None:
         center = [w // 2, h // 2]
-    psi = transform_dict['psi']
+    ksi = transform_dict['ksi']
     etta = transform_dict['etta']
     omegga = transform_dict['omegga']
     eps = transform_dict['eps']
@@ -294,10 +299,10 @@ def apply_transform(image, transform_dict, center=None, verbose=False):
         image_shifted = image
 
     mat_trans_center = get_translation_mat(*center)
-    mat_rot_psi = get_rotation_mat(normalize_alpha(psi), radians=True)
+    mat_rot_ksi = get_rotation_mat(normalize_alpha(ksi), radians=True)
     mat_trans_b = get_translation_mat(com_offset, 0)
 
-    mat_o_p = mat_trans_b @ mat_trans_center @ mat_rot_psi @ mat_inv(mat_trans_b)
+    mat_o_p = mat_trans_b @ mat_trans_center @ mat_rot_ksi @ mat_inv(mat_trans_b)
 
     P_coords = get_mat_2x3(mat_o_p) @ np.array([0, 0, 1])
 

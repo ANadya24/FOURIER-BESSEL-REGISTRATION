@@ -23,7 +23,6 @@ def FBT(pol, m, x_net, u_net, theta_net):
 
     bessel = sp.special.jv(m, u_net.reshape(-1, 1).
                            dot(x_net.reshape(1, -1)))
-
     ff = bessel * fm.reshape(-1, 1) * u_net.reshape(-1, 1)
     #     ff = sp.special.jn(m, u_net.dot(x_net)) * fm * u_net
 

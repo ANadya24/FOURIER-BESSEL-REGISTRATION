@@ -4,7 +4,7 @@ import mrcfile
 from glob import glob
 from registration_functions import (
     run_fbm, run_fbm_laguerre,
-    run_fast_fbm_laguerre, precompute
+    run_fast_fbm_laguerre, precompute_w_params
 )
 from util_functions import save_arr_mrc
 
@@ -37,6 +37,8 @@ lag_num_dots = 1000
 center = 128, 128
 
 
+params = precompute_w_params(image_radius, pixel_sampling, com_offset_initial, lag_func_num,
+                             lag_scale, compute_zeros=True)
 for folder in folders:
     for model in models:
         for path in glob(str(Path(global_path) / folder / model / f'{nums[model]}*_stack.mrc')):
@@ -44,7 +46,7 @@ for folder in folders:
             with mrcfile.open(path) as mrc:
                 seq = mrc.data
 
-            params = precompute()
+            # params = precompute()
 
             method_path = results_path / method
             os.makedirs(str(method_path), exist_ok=True)

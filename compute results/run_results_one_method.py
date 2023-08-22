@@ -4,7 +4,7 @@ import mrcfile
 from glob import glob
 from registration_functions import (
     run_fbm, run_fbm_laguerre,
-    run_fast_fbm_laguerre, precompute
+    run_fast_fbm_laguerre, precompute_w_params
 )
 from util_functions import save_arr_mrc
 
@@ -42,7 +42,8 @@ lag_scale=5
 lag_num_dots = 2000
 center = 128, 128
 
-params = precompute()
+params = precompute_w_params(image_radius, pixel_sampling, com_offset_initial, lag_func_num,
+                             lag_scale, compute_zeros=method=='fast_fbm_laguerre')
 
 method_path = results_path / method
 os.makedirs(str(method_path), exist_ok=True)

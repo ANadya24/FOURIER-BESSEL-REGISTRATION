@@ -225,8 +225,8 @@ class Laguerre:
                 cond = abs(x0 - x1) > 5e-16 * (1 + abs(x1)) * 100
 
             zeros[roots] = x1
-            if np.isnan(x1):
-                print(x0, x1, l, l_sharp, l_sum, epsilon)
+            # if np.isnan(x1):
+            #     print(x0, x1, l, l_sharp, l_sum, epsilon)
             x1 *= 0.5
 
         return zeros
@@ -236,9 +236,6 @@ class Laguerre:
         x1 = 0
         epsilon = np.finfo('float64').resolution
         upper_value = n + alpha + (n - 1) * (n + alpha) ** 0.5
-        problems = False
-        problem_bag = []
-
         for roots in range(n):
             if (roots / n) < 0.1:
                 x1 = 1e-6
@@ -248,17 +245,12 @@ class Laguerre:
             while cond:
                 delta = time.time() - start
                 if delta >= abort_after:
-                    problems = True
-                    problem_bag.append(roots)
+                    zeros[roots] = x1
                     break
 
                 x0 = x1
                 l = self.lag_function(n, alpha, x0)
                 ln_1 = self.lag_function(n - 1, alpha, x0)
-
-                #             lag = lag_object.create_functions(n + 1, alpha, [x0], 1)
-                #             l = lag[n][0]
-                #             ln_1 = lag[n - 1][0]
 
                 if np.isnan(l):
                     l = 0.
@@ -272,22 +264,17 @@ class Laguerre:
                     l_sum += 1 / (x0 - zeros[i] + epsilon)
 
                 x1 = x0 - l / (l_sharp - l * l_sum + epsilon)
+                if x1 < 0:
+                    x1 = 0.
+
+                if x1 >= upper_value:
+                    x1 = zeros[roots - 1]
+
                 cond = abs(x0 - x1) > 5e-16 * (1 + abs(x1)) * 100
 
             zeros[roots] = x1
 
-            if x1 >= upper_value or x1 < 0 or np.isnan(x1):
-                problems = True
-                problem_bag.append(roots)
             x1 *= 0.5
-
-        if problems:
-            goods = []
-            for i in range(len(zeros)):
-                if i not in problem_bag:
-                    goods.append(i)
-            zeros = np.take(zeros, goods, 0)
-
         return np.sort(zeros)
 
     def transform_forward_fast_x2sqrtx_laguerre_quad(self, laguerre_zeros, n_coef, alpha, data, x):

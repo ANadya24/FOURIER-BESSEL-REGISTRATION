@@ -1,6 +1,5 @@
 from typing import List, Any
 import numpy as np
-from tqdm import tqdm
 import time
 
 
@@ -102,29 +101,12 @@ class Laguerre:
             value[np.isnan(value)] = 0.
             functions[0] = value
 
-            # for i in range(len(x)):
-            #
-            #     if alpha < 0:
-            #         mul_alpha = 1 / ((a * x[i]) ** (-alpha / 2) + 1e-7)
-            #     else:
-            #         mul_alpha = (a * x[i]) ** (alpha / 2)
-            #     if np.isnan(norm * np.exp(-a * x[i] / 2) * mul_alpha):
-            #         print('alpha', alpha, i, x[i], a)
-            #         print(mul_alpha, np.exp(-a * x[i] / 2), norm)
-            #         functions[0].append(0.)
-            #     else:
-            #         functions[0].append(norm * np.exp(-a * x[i] / 2) * mul_alpha)
-
         if max_number == 1:
             return functions
 
         if max_number >= 1:
             norm = (1 / (alpha + 1)) ** 0.5
-
             functions[1] = norm * (1 + alpha - a * x) * functions[0]
-            # functions[1] = []
-            # for i in range(len(x)):
-            #     functions[1].append(norm * (1 + alpha - a * x[i]) * functions[0][i])
 
         if max_number == 2:
             return functions
@@ -132,12 +114,6 @@ class Laguerre:
         for j in range(2, max_number):
             functions[j] = functions[j - 1] * (-x * a + 2 * j - 1 + alpha) / (j * (j + alpha)) ** 0.5 - \
                            functions[j - 2] * ((j - 1) * (alpha + j - 1) / (j * (j + alpha))) ** 0.5
-            # functions[j] = []
-            # for i in range(len(x)):
-            #     functions[j].append(
-            #         functions[j - 1][i] * (-x[i] * a + 2 * j - 1 + alpha) / (j * (j + alpha)) ** 0.5 -
-            #         functions[j - 2][i] * ((j - 1) * (alpha + j - 1) / (j * (j + alpha))) ** 0.5)
-
         return functions
 
     def create_functions_x2_2sqrtx(self, max_number: int, alpha: int, x: List[float], a: float) -> List[Any]:

@@ -25,7 +25,7 @@ def rotate(im, angle, center=None):
                           (im.shape[1], im.shape[0]))
 
 
-def apply_transform(image, transform_dict):
+def apply_transform(image, transform_dict, rotate_only=False):
     h, w = image.shape[:2]
     ksi = transform_dict['ksi']
     etta_prime = transform_dict['etta']
@@ -41,8 +41,8 @@ def apply_transform(image, transform_dict):
     #     print('alpha', np.degrees(alpha))
 
     im_reg = rotate(image, -np.degrees(alpha))
-
-    im_reg = shift(im_reg, (-tx, -ty))
+    if not rotate_only:
+        im_reg = shift(im_reg, (-tx, -ty))
 
     return im_reg, [np.degrees(alpha), tx, ty]
 
@@ -50,3 +50,13 @@ def apply_transform(image, transform_dict):
 def save_arr_mrc(fname, arr):
     with mrcfile.new(fname, overwrite=True) as mrc:
         mrc.set_data(np.array(arr))
+
+
+def convert_angle_to_interval(value, interval=[-180, 180]):
+    minv, maxv = interval
+    interval_range = maxv-minv
+    if value > maxv:
+        value -= interval_range
+    if value < minv:
+        value += interval_range
+    return value

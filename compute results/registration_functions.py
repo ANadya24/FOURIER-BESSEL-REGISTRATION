@@ -188,7 +188,7 @@ def precompute_w_params(image_radius, pixel_sampling, com_offset_initial, lag_fu
             with open(f'cryo_laguerre_zeros_{len(alphas)}_{lag_func_num}.pkl', 'rb') as file:
                 params['lag_zeros'] = pickle.load(file)
         else:
-            params['lag_zeros'] = laguerre_zeros_precompute(alphas, lag_func_num + 1, abort_after=0.01)
+            params['lag_zeros'] = laguerre_zeros_precompute(alphas, lag_func_num + 1, abort_after=0.1)
             with open(f'cryo_laguerre_zeros_{len(alphas)}_{lag_func_num}.pkl', 'wb') as file:
                 pickle.dump(params['lag_zeros'], file)
     params['integration_intervals'] = [Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net,

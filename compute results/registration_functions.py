@@ -9,72 +9,96 @@ from skimage import registration as im_reg_met
 from utils import shift, polar_trfm
 from registration import (
     set_integration_intervals,
-    laguerre_zeros_precompute, 
-    image_fbt_precompute, 
+    laguerre_zeros_precompute,
+    image_fbt_precompute,
     fbm_registration,
     laguerre_functions_precompute
 )
 
-from util_functions import normalize, apply_transform
-    
+from util_functions import (normalize,
+                            apply_transform,
+                            mean_std_normalize
+                            )
 
-# def run_fast_fbm_laguerre(seq, func_parameters):
-#     df = pd.DataFrame(columns=['x', 'y', 'ang', 'ksi', 'eta_prime', 'omega_prime', 'dft_x', 'dft_y'])
-#     fbm_seq = [seq[0].copy()]
-#     fbm_seq_shift = [seq[0].copy()]
-#
-#     fixed_image = normalize(sp.ndimage.gaussian_filter(seq[0].copy(), 1.3))
-#     func_parameters = fixed_image_precompute(fixed_image,
-#                                              func_parameters)
-#
-#     for i in tqdm(range(1, len(seq))):
-#         reg1 = fbm_registration(fixed_image,
-#                                 normalize(sp.ndimage.gaussian_filter(seq[i].copy(), 1.3)),
-#                                 image_radius=image_radius, p_s=pixel_sampling, com_offset=com_offset_initial,
-#                                 method='fast_fbm_laguerre', lag_func_num=lag_func_num, lag_scale=lag_scale,
-#                                 masks=None, shift_by_mask=False, additional_params=func_parameters)
-#
-#         im_reg1, params = apply_transform(seq[i].copy(), reg1, center)
-#         fbm_seq.append(im_reg1.copy())
-#
-# #         print('IoU:', iou(seq[0], im_reg1))
-#         shifts = im_reg_met.phase_cross_correlation(normalize(sp.ndimage.gaussian_filter(seq[0].copy(), 1.3)),
-#                                                     normalize(sp.ndimage.gaussian_filter(im_reg1.copy(), 1.3)),
-#                                                     upsample_factor=100)[0][::-1]
-#
-#         fbm_seq_shift.append(shift(im_reg1, -shifts))
-#         founded_values = [params[1], params[2], params[0], reg1['ksi'],
-#                           reg1['etta'], reg1['omegga'], shifts[0], shifts[1]]
-#         df.loc[i-1] = founded_values
-#
-#     fbm_seq = np.array(fbm_seq)
-#     return df, fbm_seq, fbm_seq_shift
 
-def run_fbm(seq, func_parameters, image_radius, pixel_sampling, com_offset_initial):
+def run_fast_fbm_laguerre(seq, func_parameters, image_radius, pixel_sampling, com_offset_initial,
+                          lag_func_num, lag_scale, lag_num_dots, normalization='standard',
+                          do_2nd_step=False):
+    assert normalization in ['standard', 'mean_std']
+    if normalization == 'standard':
+        normalize_func = normalize
+    else:
+        normalize_func = mean_std_normalize
     df = pd.DataFrame(columns=['x', 'y', 'ang', 'ksi', 'eta_prime', 'omega_prime', 'dft_x', 'dft_y'])
     fbm_seq = [seq[0].copy()]
     fbm_seq_shift = [seq[0].copy()]
-    fixed_image = normalize(sp.ndimage.gaussian_filter(seq[0].copy(), 1.3))
+
+    fixed_image = normalize_func(sp.ndimage.gaussian_filter(seq[0].copy(), 1.3))
+
+    func_parameters = fixed_image_precompute(fixed_image,
+                                             func_parameters, 'fast_fbm_laguerre', image_radius, pixel_sampling,
+                                             com_offset_initial, lag_func_num, lag_scale,
+                                             lag_num_dots)
+
+    for i in tqdm(range(1, len(seq))):
+        reg1 = fbm_registration(fixed_image,
+                                normalize_func(sp.ndimage.gaussian_filter(seq[i].copy(), 1.3)),
+                                image_radius=image_radius, p_s=pixel_sampling, com_offset=com_offset_initial,
+                                method='fast_fbm_laguerre', lag_func_num=lag_func_num, lag_scale=lag_scale,
+                                lag_num_dots=lag_num_dots,
+                                masks=None, shift_by_mask=False, additional_params=func_parameters)
+
+        im_reg1, params = apply_transform(seq[i].copy(), reg1)
+        fbm_seq.append(im_reg1.copy())
+
+        if do_2nd_step:
+            shifts = im_reg_met.phase_cross_correlation(fixed_image,
+                                                        normalize_func(sp.ndimage.gaussian_filter(im_reg1.copy(), 1.3)),
+                                                        upsample_factor=100)[0][::-1]
+
+            fbm_seq_shift.append(shift(im_reg1, -shifts))
+        else:
+            shifts = [0., 0.]
+
+        founded_values = [params[1], params[2], params[0], reg1['ksi'],
+                          reg1['etta'], reg1['omegga'], shifts[0], shifts[1]]
+        df.loc[i - 1] = founded_values
+
+    fbm_seq = np.array(fbm_seq)
+    return df, fbm_seq, fbm_seq_shift
+
+
+def run_fbm(seq, func_parameters, image_radius, pixel_sampling, com_offset_initial, normalization='standard',
+            do_2nd_step=False):
+    assert normalization in ['standard', 'mean_std']
+    if normalization == 'standard':
+        normalize_func = normalize
+    else:
+        normalize_func = mean_std_normalize
+    df = pd.DataFrame(columns=['x', 'y', 'ang', 'ksi', 'eta_prime', 'omega_prime', 'dft_x', 'dft_y'])
+    fbm_seq = [seq[0].copy()]
+    fbm_seq_shift = [seq[0].copy()]
+    fixed_image = normalize_func(sp.ndimage.gaussian_filter(seq[0].copy(), 1.3))
     func_parameters = fixed_image_precompute(fixed_image,
                                              func_parameters, 'fbm', image_radius,
                                              pixel_sampling, com_offset_initial)
     for i in tqdm(range(1, len(seq))):
         reg1 = fbm_registration(fixed_image,
-                                normalize(sp.ndimage.gaussian_filter(seq[i].copy(), 1.3)),
+                                normalize_func(sp.ndimage.gaussian_filter(seq[i].copy(), 1.3)),
                                 image_radius=image_radius, p_s=pixel_sampling, com_offset=com_offset_initial,
                                 method='fbm', masks=None, shift_by_mask=False,
                                 additional_params=func_parameters)
-        #                             method='fbm_laguerre', lag_func_num=lag_func_num, lag_scale=lag_scale,
-        #                             masks=None, shift_by_mask=False, additional_params=params)
         im_reg1, params = apply_transform(seq[i].copy(), reg1)
         fbm_seq.append(im_reg1.copy())
 
-        #         print('IoU:', iou(seq[0], im_reg1))
-        shifts = im_reg_met.phase_cross_correlation(normalize(sp.ndimage.gaussian_filter(seq[0].copy(), 1.3)),
-                                                    normalize(sp.ndimage.gaussian_filter(im_reg1.copy(), 1.3)),
-                                                    upsample_factor=100)[0][::-1]
+        if do_2nd_step:
+            shifts = im_reg_met.phase_cross_correlation(fixed_image,
+                                                        normalize_func(sp.ndimage.gaussian_filter(im_reg1.copy(), 1.3)),
+                                                        upsample_factor=100)[0][::-1]
 
-        fbm_seq_shift.append(shift(im_reg1, -shifts))
+            fbm_seq_shift.append(shift(im_reg1, -shifts))
+        else:
+            shifts = [0., 0.]
         founded_values = [params[1], params[2], params[0], reg1['ksi'],
                           reg1['etta'], reg1['omegga'], shifts[0], shifts[1]]
         df.loc[i - 1] = founded_values
@@ -84,31 +108,45 @@ def run_fbm(seq, func_parameters, image_radius, pixel_sampling, com_offset_initi
 
 
 def run_fbm_laguerre(seq, func_parameters, image_radius, pixel_sampling,
-                     com_offset_initial, lag_func_num, lag_scale, lag_num_dots):
+                     com_offset_initial, lag_func_num, lag_scale, lag_num_dots, normalization='standard',
+                     do_2nd_step=False, fixed_mean=False):
+    assert normalization in ['standard', 'mean_std']
+    if normalization == 'standard':
+        normalize_func = normalize
+    else:
+        normalize_func = mean_std_normalize
     df = pd.DataFrame(columns=['x', 'y', 'ang', 'ksi', 'eta_prime', 'omega_prime', 'dft_x', 'dft_y'])
     fbm_seq = [seq[0].copy()]
     fbm_seq_shift = [seq[0].copy()]
-    fixed_image = normalize(sp.ndimage.gaussian_filter(seq[0].copy(), 1.3))
-    func_parameters = fixed_image_precompute(fixed_image,
-                                             func_parameters, 'fbm_laguerre', image_radius, pixel_sampling,
-                                             com_offset_initial, lag_func_num, lag_scale,
-                                             lag_num_dots)
+    fixed_image = normalize_func(sp.ndimage.gaussian_filter(seq[0].copy(), 1.3))
+    if not fixed_mean:
+        func_parameters = fixed_image_precompute(fixed_image,
+                                                 func_parameters, 'fbm_laguerre', image_radius, pixel_sampling,
+                                                 com_offset_initial, lag_func_num, lag_scale,
+                                                 lag_num_dots)
     for i in tqdm(range(1, len(seq))):
         reg1 = fbm_registration(fixed_image,
-                                normalize(sp.ndimage.gaussian_filter(seq[i].copy(), 1.3)),
+                                normalize_func(sp.ndimage.gaussian_filter(seq[i].copy(), 1.3)),
                                 image_radius=image_radius, p_s=pixel_sampling, com_offset=com_offset_initial,
                                 method='fbm_laguerre', masks=None, lag_num_dots=lag_num_dots, shift_by_mask=False,
                                 lag_func_num=lag_func_num, lag_scale=lag_scale,
                                 additional_params=func_parameters)
         im_reg1, params = apply_transform(seq[i].copy(), reg1)
         fbm_seq.append(im_reg1.copy())
+        if fixed_mean:
+            prev_fixed_image = fixed_image.copy()
+            fixed_image = np.stack([fixed_image, normalize_func(im_reg1)], 0).mean(0)
+            if prev_fixed_image.std() < fixed_image.std():
+                fixed_image = prev_fixed_image
 
-        #         print('IoU:', iou(seq[0], im_reg1))
-        shifts = im_reg_met.phase_cross_correlation(fixed_image,
-                                                    normalize(sp.ndimage.gaussian_filter(im_reg1.copy(), 1.3)),
-                                                    upsample_factor=100)[0][::-1]
+        if do_2nd_step:
+            shifts = im_reg_met.phase_cross_correlation(fixed_image,
+                                                        normalize_func(sp.ndimage.gaussian_filter(im_reg1.copy(), 1.3)),
+                                                        upsample_factor=100)[0][::-1]
 
-        fbm_seq_shift.append(shift(im_reg1, -shifts))
+            fbm_seq_shift.append(shift(im_reg1, -shifts))
+        else:
+            shifts = [0., 0.]
         founded_values = [params[1], params[2], params[0], reg1['ksi'],
                           reg1['etta'], reg1['omegga'], shifts[0], shifts[1]]
         df.loc[i - 1] = founded_values
@@ -117,19 +155,13 @@ def run_fbm_laguerre(seq, func_parameters, image_radius, pixel_sampling,
     return df, fbm_seq, fbm_seq_shift
 
 
-def fixed_image_precompute(image, additional_params, method, image_radius, pixel_sampling,
-                           com_offset, lag_func_num=None, lag_scale=None, lag_num_dots=None):
+def fixed_image_precompute(image, additional_params, method, image_radius, lag_func_num=None, lag_scale=None,
+                           lag_num_dots=None):
     if additional_params is None:
         additional_params = {}
 
-    if 'integration_intervals' in additional_params:
-        Im1, Ih1, Imm, theta_net, \
-        u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth = additional_params['integration_intervals']
-    else:
-        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth = \
-            set_integration_intervals(image_radius, pixel_sampling, com_offset)
-        additional_params['integration_intervals'] = \
-            Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth
+    Im1, Ih1, Imm, theta_net, \
+    u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth = additional_params['integration_intervals']
 
     if 'polar_fixed' in additional_params:
         pol1 = additional_params['polar_fixed']
@@ -137,20 +169,9 @@ def fixed_image_precompute(image, additional_params, method, image_radius, pixel
         maxrad = image_radius
         pol1 = polar_trfm(image, int(2 * bandwidth), int(2 * bandwidth / np.pi), maxrad)
 
-    if 'precomputed_fbt_fixed' in additional_params:
-        Fm_arr = additional_params['precomputed_fbt_fixed']
-    else:
-        alphas = []
-        for it_m1 in range(len(Im1)):
-            m1 = Im1[it_m1]
-            for it_h1 in range(len(Ih1)):
-                h1 = Ih1[it_h1]
-                for it_mm in range(len(Imm)):
-                    mm = Imm[it_mm]
-                    if m1 + h1 + mm in alphas:
-                        continue
-                    alphas.append(m1 + h1 + mm)
-        # print('Fm precompute')
+    if 'precomputed_fbt_fixed' not in additional_params:
+        alphas = additional_params['alphas']
+
         if method in ['fbm_laguerre', 'fast_fbm_laguerre'] and \
                 'laguerre_functions' not in additional_params:
             additional_params['laguerre_functions'] = laguerre_functions_precompute(alphas, x_net,
@@ -168,9 +189,13 @@ def fixed_image_precompute(image, additional_params, method, image_radius, pixel
 
 
 def precompute_w_params(image_radius, pixel_sampling, com_offset_initial, lag_func_num,
-                        lag_scale, compute_zeros=False, verbose=True):
+                        lag_scale, lag_num_dots=1000, compute_zeros=False, verbose=True):
+    params = {}
+
     Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth = \
         set_integration_intervals(image_radius, pixel_sampling, com_offset_initial, verbose=verbose)
+    params['integration_intervals'] = \
+        Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth
     alphas = []
     for it_m1 in tqdm(range(len(Im1))):
         m1 = Im1[it_m1]
@@ -181,20 +206,22 @@ def precompute_w_params(image_radius, pixel_sampling, com_offset_initial, lag_fu
                 if abs(m1 + h1 + mm) in alphas:
                     continue
                 alphas.append(abs(m1 + h1 + mm))
+    params['alphas'] = alphas
 
-    params = {}
     if compute_zeros:
         if os.path.exists(f'cryo_laguerre_zeros_{len(alphas)}_{lag_func_num}.pkl'):
             with open(f'cryo_laguerre_zeros_{len(alphas)}_{lag_func_num}.pkl', 'rb') as file:
                 params['lag_zeros'] = pickle.load(file)
         else:
-            params['lag_zeros'] = laguerre_zeros_precompute(alphas, lag_func_num + 1, abort_after=0.1)
+            print('lag_func_num', lag_func_num)
+            params['lag_zeros'] = laguerre_zeros_precompute(alphas, lag_func_num + 1)
             with open(f'cryo_laguerre_zeros_{len(alphas)}_{lag_func_num}.pkl', 'wb') as file:
                 pickle.dump(params['lag_zeros'], file)
     params['integration_intervals'] = [Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net,
                                        psi_net, eta_net, eps, b, bandwidth]
 
-    laguerre_functions = laguerre_functions_precompute(alphas, x_net, lag_func_num, lag_scale)
+    laguerre_functions = laguerre_functions_precompute(alphas, x_net,
+                                                       lag_func_num, lag_num_dots, lag_scale)
     params['laguerre_functions'] = laguerre_functions
 
     c1_coefs = np.zeros((len(Im1), len(x_net)))

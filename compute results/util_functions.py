@@ -1,11 +1,21 @@
 import numpy as np
 import mrcfile
-from matrix_utils import *
+from matrix_utils import (
+    get_translation_mat,
+    get_rotation_mat,
+    get_mat_2x3
+)
+
 import cv2
 
 
 def normalize(im):
     return (im - im.min()) / (im.max() - im.min())
+
+
+def mean_std_normalize(im):
+    im = (im - im.mean())
+    return im / im.std()
 
 
 def shift(im, vec):
@@ -25,8 +35,7 @@ def rotate(im, angle, center=None):
                           (im.shape[1], im.shape[0]))
 
 
-def apply_transform(image, transform_dict, rotate_only=False):
-    h, w = image.shape[:2]
+def apply_transform(image, transform_dict, center=None, rotate_only=False):
     ksi = transform_dict['ksi']
     etta_prime = transform_dict['etta']
     omegga_prime = transform_dict['omegga']
@@ -38,9 +47,8 @@ def apply_transform(image, transform_dict, rotate_only=False):
     rho = (2 * com_offset ** 2 * (1 + np.cos(etta + eps))) ** 0.5
     tx, ty = rho * np.cos(ksi), rho * np.sin(ksi)
     alpha = etta + eps + omegga + ksi
-    #     print('alpha', np.degrees(alpha))
 
-    im_reg = rotate(image, -np.degrees(alpha))
+    im_reg = rotate(image, -np.degrees(alpha), center=center)
     if not rotate_only:
         im_reg = shift(im_reg, (-tx, -ty))
 
@@ -52,7 +60,7 @@ def save_arr_mrc(fname, arr):
         mrc.set_data(np.array(arr))
 
 
-def convert_angle_to_interval(value, interval=[-180, 180]):
+def convert_angle_to_interval(value, interval=(-180, 180)):
     minv, maxv = interval
     interval_range = maxv-minv
     if value > maxv:

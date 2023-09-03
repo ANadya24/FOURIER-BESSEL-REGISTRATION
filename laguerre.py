@@ -1,6 +1,5 @@
 from typing import List, Any
 import numpy as np
-import time
 
 
 class Laguerre:
@@ -24,48 +23,6 @@ class Laguerre:
         # разница между исходной функцией и суммой autoScale, т.е. погрешность
         self.autoScaleResidue = None
 
-    #     def initialize(self, maxX: float, funcToDecompose: List[float], alpha: int):
-    #         self.initialize_parameters(funcToDecompose, alpha)
-    #         self._maxX = maxX
-    #         self.initX(self._maxX, alpha)
-
-    #     def initialize_parameters(self, funcToDecompose: List[float], alpha: int):
-    #         self._maxX = 10.
-    #         self._length = len(funcToDecompose)
-    #         self.alpha = alpha
-
-    #         self.x = []
-    #         self.initX(self._maxX, alpha)
-
-    #         self.baseline = []
-    #         self.f = []
-    #         assert self._length is not None
-    #         assert funcToDecompose is not None
-    #         for i in range(self._length):
-    #             self.baseline.append(funcToDecompose[i] + i * (
-    #                     funcToDecompose[self._length - 1] - funcToDecompose[0]) / float(self._length))
-    #             self.f.append(funcToDecompose[i] - self.baseline[i])
-
-    #     def initX(self, maxX: float, alpha: int):
-    #         step = maxX / (self._length - 1)
-    #         fi_n = []
-    #         fi_n1 = []
-    #         fi_n2 = []
-    #         exp = []
-
-    #         for i in range(self._length):
-    #             self.x.append(i * step)
-    #             print(alpha, self.x[i])
-    #             exp.append(np.exp(-self.x[i] / 2.) * self.x[i] ** (alpha / 2.))
-    #             fi_n2.append(exp[i])
-    #             fi_n1.append(exp[i] * (1 + alpha - self.x[i]))
-    #             fi_n.append((fi_n1[i] * (2 * 1 + 1 + alpha - self.x[i]) - fi_n2[i] * (1 + alpha)) / (1 + 1))
-
-    #         self.laguerres = []
-    #         self.laguerres.extend(fi_n2)
-    #         self.laguerres.extend(fi_n1)
-    #         self.laguerres.extend(fi_n)
-
     def create_functions(self, max_number, alpha, x, a) -> List[Any]:
         """
         рассчитывает систему функций Лагерра для фиксированного α и n = 0, . . . , N и
@@ -84,7 +41,6 @@ class Laguerre:
         #             self._length = len(x)
 
         functions = np.zeros((max_number, len(x)))
-        norm = None
         if isinstance(x, list):
             x = np.array(x)
 
@@ -231,7 +187,7 @@ class Laguerre:
 
         return zeros
 
-    def laguerre_zeros(self, n, alpha, abort_after=1):
+    def laguerre_zeros(self, n, alpha, abort_after=5000):
         zeros = np.zeros(n)
         x1 = 0
         epsilon = np.finfo('float64').resolution
@@ -239,12 +195,10 @@ class Laguerre:
         for roots in range(n):
             if (roots / n) < 0.1:
                 x1 = 1e-6
-
+            iterations = 0
             cond = True
-            start = time.time()
             while cond:
-                delta = time.time() - start
-                if delta >= abort_after:
+                if iterations >= abort_after:
                     zeros[roots] = x1
                     break
 
@@ -271,6 +225,7 @@ class Laguerre:
                     x1 = zeros[roots - 1]
 
                 cond = abs(x0 - x1) > 5e-16 * (1 + abs(x1)) * 100
+                iterations += 1
 
             zeros[roots] = x1
 

@@ -35,10 +35,13 @@ def run_fast_fbm_laguerre(seq, func_parameters, image_radius, pixel_sampling, co
 
     fixed_image = normalize_func(sp.ndimage.gaussian_filter(seq[0].copy(), 1.3))
 
-    func_parameters = fixed_image_precompute(fixed_image,
-                                             func_parameters, 'fast_fbm_laguerre', image_radius, pixel_sampling,
-                                             com_offset_initial, lag_func_num, lag_scale,
-                                             lag_num_dots)
+    func_parameters = fixed_image_precompute(image=fixed_image,
+                                             additional_params=func_parameters,
+                                             method='fast_fbm_laguerre',
+                                             image_radius=image_radius,
+                                             lag_func_num=lag_func_num,
+                                             lag_scale=lag_scale,
+                                             lag_num_dots=lag_num_dots)
 
     for i in tqdm(range(1, len(seq))):
         reg1 = fbm_registration(fixed_image,
@@ -79,9 +82,10 @@ def run_fbm(seq, func_parameters, image_radius, pixel_sampling, com_offset_initi
     fbm_seq = [seq[0].copy()]
     fbm_seq_shift = [seq[0].copy()]
     fixed_image = normalize_func(sp.ndimage.gaussian_filter(seq[0].copy(), 1.3))
-    func_parameters = fixed_image_precompute(fixed_image,
-                                             func_parameters, 'fbm', image_radius,
-                                             pixel_sampling, com_offset_initial)
+    func_parameters = fixed_image_precompute(image=fixed_image,
+                                             additional_params=func_parameters,
+                                             method='fbm',
+                                             image_radius=image_radius)
     for i in tqdm(range(1, len(seq))):
         reg1 = fbm_registration(fixed_image,
                                 normalize_func(sp.ndimage.gaussian_filter(seq[i].copy(), 1.3)),
@@ -120,10 +124,13 @@ def run_fbm_laguerre(seq, func_parameters, image_radius, pixel_sampling,
     fbm_seq_shift = [seq[0].copy()]
     fixed_image = normalize_func(sp.ndimage.gaussian_filter(seq[0].copy(), 1.3))
     if not fixed_mean:
-        func_parameters = fixed_image_precompute(fixed_image,
-                                                 func_parameters, 'fbm_laguerre', image_radius, pixel_sampling,
-                                                 com_offset_initial, lag_func_num, lag_scale,
-                                                 lag_num_dots)
+        func_parameters = fixed_image_precompute(image=fixed_image,
+                                                 additional_params=func_parameters,
+                                                 method='fbm_laguerre',
+                                                 image_radius=image_radius,
+                                                 lag_func_num=lag_func_num,
+                                                 lag_scale=lag_scale,
+                                                 lag_num_dots=lag_num_dots)
     for i in tqdm(range(1, len(seq))):
         reg1 = fbm_registration(fixed_image,
                                 normalize_func(sp.ndimage.gaussian_filter(seq[i].copy(), 1.3)),

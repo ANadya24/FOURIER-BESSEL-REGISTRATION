@@ -3,8 +3,8 @@ import numpy as np
 from skimage.measure import label, regionprops
 import cv2
 import scipy as sp
-from tqdm import tqdm
 from matplotlib import pyplot as plt
+from joblib import Parallel, delayed
 
 from utils import polar_trfm, normalize_alpha
 from matrix_utils import (
@@ -89,13 +89,37 @@ def set_integration_intervals(image_radius: int = 128,
 
 
 def laguerre_functions_precompute(alphas: List[int],
-                                  x: np.ndarray, lag_func_num: int = 40, lag_scale: float = 3):
+                                  x: np.ndarray, lag_func_num: int = 40,
+                                  lag_num_dots: int = 1000, lag_scale: float = 3):
     laguerre_functions = {}
     lag_object = Laguerre()
+
+    max_value = x.max()
+    if x.max() < 10:
+        max_value *= 5
+    x_grid = np.linspace(x.min(), max_value, lag_num_dots)
     for alpha in alphas:
-        lag_functions = lag_object.create_functions_x2_2sqrtx(lag_func_num, alpha, x * lag_scale, 1)
+        lag_functions = lag_object.create_functions_x2_2sqrtx(lag_func_num, alpha, x_grid * lag_scale, 1)
         laguerre_functions[alpha] = lag_functions
     return laguerre_functions
+
+
+def laguerre_zeros_precompute(alphas: List[int], lag_func_num: int = 40, abort_after: int = 5000):
+    lag_object = Laguerre()
+    zeros_lag = {}
+
+    def calc_zeros(alpha):
+        if np.isinf(sp.special.gamma(abs(alpha))):
+            return (alpha, np.zeros(lag_func_num))
+        return (alpha, lag_object.laguerre_zeros(lag_func_num, alpha, abort_after=abort_after))
+
+    abs_alphas = np.unique(np.abs(alphas))
+
+    results = Parallel(n_jobs=4)(delayed(calc_zeros)(alpha) for alpha in abs_alphas)
+    for alpha, zeros in results:
+        zeros_lag[alpha] = zeros
+
+    return zeros_lag
 
 
 def image_fbt_precompute(image: np.ndarray, alphas: List[int], theta_net: np.ndarray,
@@ -113,39 +137,32 @@ def image_fbt_precompute(image: np.ndarray, alphas: List[int], theta_net: np.nda
     for alpha in alphas:
         if method == 'fbm':
             Fm = FBT(image, alpha, x_net, u_net, theta_net)
-        elif method == 'fbm_laguerre':
-            Fm = FBT_Laguerre(image, abs(alpha), x_net, u_net, theta_net, lag_func_num,
-                              scale=lag_scale, num_dots=lag_num_dots,
-                              out_lag_functions=laguerre_functions[abs(alpha)])
-            if alpha < 0:
-                Fm *= (-1) ** abs(alpha)
         else:
-            if 'lag_zeros' in additional_params:
-                zeros = additional_params['lag_zeros'][abs(alpha)]
+            # if np.isinf(sp.special.gamma(abs(alpha))):
+            #     Fm = np.zeros(len(x_net))
+            # else:
+            if method == 'fbm_laguerre':
+                Fm = FBT_Laguerre(image, abs(alpha), x_net, u_net, theta_net, lag_func_num,
+                                  scale=lag_scale, num_dots=lag_num_dots,
+                                  out_lag_functions=laguerre_functions[abs(alpha)])
+                if alpha < 0:
+                    Fm *= (-1) ** abs(alpha)
             else:
-                zeros = None
-            Fm = FBT_Laguerre_fast(image, abs(alpha),
-                                   x_net, u_net, theta_net,
-                                   lag_func_num, scale=lag_scale,
-                                   num_dots=lag_num_dots, zeros=zeros,
-                                   lag_functions=laguerre_functions[abs(alpha)])
+                if 'lag_zeros' in additional_params:
+                    zeros = additional_params['lag_zeros'][abs(alpha)]
+                else:
+                    zeros = None
+                Fm = FBT_Laguerre_fast(image, abs(alpha),
+                                       x_net, u_net, theta_net,
+                                       lag_func_num, scale=lag_scale,
+                                       num_dots=lag_num_dots, zeros=zeros,
+                                       lag_functions=laguerre_functions[abs(alpha)])
 
-            if alpha < 0:
-                Fm *= (-1) ** abs(alpha)
+                if alpha < 0:
+                    Fm *= (-1) ** abs(alpha)
 
         fbt_arr[alpha] = Fm
     return fbt_arr
-
-
-def laguerre_zeros_precompute(alphas: List[int], lag_func_num: int = 40, abort_after: float = 1.):
-    lag_object = Laguerre()
-    zeros_lag = {}
-    for alpha in tqdm(alphas):
-        if alpha in zeros_lag:
-            continue
-        zeros = lag_object.laguerre_zeros(lag_func_num, alpha, abort_after=abort_after)
-        zeros_lag[alpha] = zeros
-    return zeros_lag
 
 
 def fbm_registration(im1: np.ndarray, im2: np.ndarray,
@@ -165,9 +182,6 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
         Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, ksi_net, eta_net, eps, b, bandwidth = \
             set_integration_intervals(image_radius, p_s, com_offset, verbose)
 
-    # maxrad = im1.shape[0] ** 2 + im1.shape[1] ** 2
-    # maxrad **= 0.5
-    # maxrad = np.ceil(maxrad).astype(int)
     maxrad = image_radius
 
     if 'polar_fixed' in additional_params:
@@ -263,12 +277,10 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
             c2 = c2_coefs[it_h1, :] * c1
             for it_mm in range(len(Imm)):
                 mm = Imm[it_mm]
-                #                 coef = 2 * np.pi * np.exp(1j * (h1 + mm) * eps)
                 Fm = Fm_arr[m1 + h1 + mm]
                 Gm = Gm_arr[mm]
                 func = Fm * np.conj(Gm) * c2
                 Tf[it_m1, it_h1, it_mm] *= np.sum(func) * 0.5 * (x_net[1] - x_net[0])
-    #                 Tf[it_m1, it_h1, it_mm] *= coef
 
     T = np.fft.ifftn(np.fft.ifftshift(Tf))
     [iksi, ietta, iomegga] = np.unravel_index(np.argmax(T), Tf.shape)

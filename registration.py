@@ -5,6 +5,7 @@ import cv2
 import scipy as sp
 from matplotlib import pyplot as plt
 from joblib import Parallel, delayed
+from tqdm import tqdm
 
 from utils import polar_trfm, normalize_alpha
 from matrix_utils import (
@@ -94,28 +95,34 @@ def laguerre_functions_precompute(alphas: List[int],
     laguerre_functions = {}
     lag_object = Laguerre()
 
-    max_value = x.max()
-    if x.max() < 10:
-        max_value *= 5
-    x_grid = np.linspace(x.min(), max_value, lag_num_dots)
+    # max_value = x.max()
+    # if x.max() < 10:
+    #     max_value *= 5
+    # x_grid = np.linspace(x.min(), max_value, lag_num_dots)
     for alpha in alphas:
-        lag_functions = lag_object.create_functions_x2_2sqrtx(lag_func_num, alpha, x_grid * lag_scale, 1)
-        laguerre_functions[alpha] = lag_functions
+        # if alpha >= 0 and alpha < 178:
+        # if np.isinf(sp.special.gamma(abs(alpha))):
+        #     continue
+        if abs(alpha) not in laguerre_functions:
+            lag_functions = lag_object.create_functions_x2_2sqrtx(lag_func_num, alpha, x * lag_scale, 1)
+            laguerre_functions[alpha] = lag_functions
     return laguerre_functions
 
 
-def laguerre_zeros_precompute(alphas: List[int], lag_func_num: int = 40, abort_after: int = 5000):
+def laguerre_zeros_precompute(alphas: List[int], num_zeros: int = 40, abort_after: int = 5000, n_jobs:int = 4):
     lag_object = Laguerre()
     zeros_lag = {}
 
     def calc_zeros(alpha):
         if np.isinf(sp.special.gamma(abs(alpha))):
-            return (alpha, np.zeros(lag_func_num))
-        return (alpha, lag_object.laguerre_zeros(lag_func_num, alpha, abort_after=abort_after))
+            return alpha, np.zeros(num_zeros)
+        return alpha, lag_object.laguerre_zeros(num_zeros, alpha, abort_after=abort_after)
 
+    print('Total alphas:', len(alphas))
     abs_alphas = np.unique(np.abs(alphas))
+    print('Total abs alphas:', len(abs_alphas))
 
-    results = Parallel(n_jobs=4)(delayed(calc_zeros)(alpha) for alpha in abs_alphas)
+    results = Parallel(n_jobs=n_jobs)(delayed(calc_zeros)(alpha) for alpha in tqdm(abs_alphas))
     for alpha, zeros in results:
         zeros_lag[alpha] = zeros
 
@@ -135,19 +142,26 @@ def image_fbt_precompute(image: np.ndarray, alphas: List[int], theta_net: np.nda
         laguerre_functions = None
 
     for alpha in alphas:
+        skip = False
         if method == 'fbm':
             Fm = FBT(image, alpha, x_net, u_net, theta_net)
         else:
             # if np.isinf(sp.special.gamma(abs(alpha))):
             #     Fm = np.zeros(len(x_net))
             # else:
-            if method == 'fbm_laguerre':
+            if laguerre_functions is None:
+                laguerre_func = None
+            elif abs(alpha) in laguerre_functions:
+                laguerre_func = laguerre_functions[abs(alpha)]
+            else:
+                skip = True
+            if method == 'fbm_laguerre' and not skip:
                 Fm = FBT_Laguerre(image, abs(alpha), x_net, u_net, theta_net, lag_func_num,
                                   scale=lag_scale, num_dots=lag_num_dots,
-                                  out_lag_functions=laguerre_functions[abs(alpha)])
+                                  out_lag_functions=laguerre_func)
                 if alpha < 0:
                     Fm *= (-1) ** abs(alpha)
-            else:
+            elif not skip:
                 if 'lag_zeros' in additional_params:
                     zeros = additional_params['lag_zeros'][abs(alpha)]
                 else:
@@ -156,10 +170,12 @@ def image_fbt_precompute(image: np.ndarray, alphas: List[int], theta_net: np.nda
                                        x_net, u_net, theta_net,
                                        lag_func_num, scale=lag_scale,
                                        num_dots=lag_num_dots, zeros=zeros,
-                                       lag_functions=laguerre_functions[abs(alpha)])
+                                       lag_functions=laguerre_func)
 
                 if alpha < 0:
                     Fm *= (-1) ** abs(alpha)
+            else:
+                Fm = np.zeros(len(x_net))
 
         fbt_arr[alpha] = Fm
     return fbt_arr
@@ -180,37 +196,41 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
             = additional_params['integration_intervals']
     else:
         Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, ksi_net, eta_net, eps, b, bandwidth = \
-            set_integration_intervals(image_radius, p_s, com_offset, verbose)
+            set_integration_intervals(image_radius=image_radius,
+                                      pixel_sampling=p_s, com_offset=com_offset, verbose=verbose)
 
     maxrad = image_radius
-
-    if 'polar_fixed' in additional_params:
-        pol1 = additional_params['polar_fixed']
-    else:
-        pol1 = polar_trfm(im1, int(2 * bandwidth), int(2 * bandwidth / np.pi), maxrad)
 
     if 'precomputed_fbt_fixed' in additional_params:
         Fm_arr = additional_params['precomputed_fbt_fixed']
     else:
-        alphas = []
-        for it_m1 in range(len(Im1)):
-            m1 = Im1[it_m1]
-            for it_h1 in range(len(Ih1)):
-                h1 = Ih1[it_h1]
-                for it_mm in range(len(Imm)):
-                    mm = Imm[it_mm]
-                    if m1 + h1 + mm in alphas:
-                        continue
-                    alphas.append(m1 + h1 + mm)
+        if 'alphas' in additional_params:
+            alphas = additional_params['alphas']
+        else:
+            alphas = []
+            for it_m1 in range(len(Im1)):
+                m1 = Im1[it_m1]
+                for it_h1 in range(len(Ih1)):
+                    h1 = Ih1[it_h1]
+                    for it_mm in range(len(Imm)):
+                        mm = Imm[it_mm]
+                        if m1 + h1 + mm in alphas:
+                            continue
+                        alphas.append(m1 + h1 + mm)
+
+        pol1 = polar_trfm(im1, int(2 * bandwidth), int(2 * bandwidth / np.pi), maxrad)
 
         if method in ['fbm_laguerre', 'fast_fbm_laguerre'] and \
                 'laguerre_functions' not in additional_params:
-            additional_params['laguerre_functions'] = laguerre_functions_precompute(alphas, x_net,
-                                                                                    lag_func_num, lag_scale)
-        Fm_arr = image_fbt_precompute(pol1, alphas, theta_net, u_net, x_net,
-                                      method, lag_func_num, lag_scale,
-                                      lag_num_dots,
-                                      additional_params)
+            additional_params['laguerre_functions'] = laguerre_functions_precompute(alphas=alphas,
+                                                                                    x=x_net,
+                                                                                    lag_func_num=lag_func_num,
+                                                                                    lag_num_dots=lag_num_dots,
+                                                                                    lag_scale=lag_scale)
+        Fm_arr = image_fbt_precompute(image=pol1, alphas=alphas,
+                                      theta_net=theta_net, u_net=u_net, x_net=x_net,
+                                      method=method, lag_func_num=lag_func_num, lag_scale=lag_scale,
+                                      lag_num_dots=lag_num_dots, additional_params=additional_params)
 
     if 'precomputed_c1_coefs' in additional_params:
         c1_coefs = additional_params['precomputed_c1_coefs']
@@ -249,18 +269,20 @@ def fbm_registration(im1: np.ndarray, im2: np.ndarray,
 
     Tf = np.zeros((len(Im1), len(Ih1), len(Imm)), dtype='complex')
 
-    if 'polar_moving' in additional_params:
-        pol2 = additional_params['polar_moving']
-    else:
-        pol2 = polar_trfm(im2, int(2 * bandwidth), int(2 * bandwidth / np.pi), maxrad)
+    # if 'polar_moving' in additional_params:
+    #     pol2 = additional_params['polar_moving']
+    # else:
+    pol2 = polar_trfm(im2, int(2 * bandwidth), int(2 * bandwidth / np.pi), maxrad)
 
-    if 'precomputed_fbt_moving' in additional_params:
-        Gm_arr = additional_params['precomputed_fbt_moving']
-    else:
+    # if 'precomputed_fbt_moving' in additional_params:
+    #     Gm_arr = additional_params['precomputed_fbt_moving']
+    # else:
 
-        Gm_arr = image_fbt_precompute(pol2, Imm, theta_net, u_net, x_net, method,
-                                      lag_func_num, lag_scale, lag_num_dots,
-                                      additional_params)
+    Gm_arr = image_fbt_precompute(image=pol2, alphas=Imm, theta_net=theta_net,
+                                  u_net=u_net, x_net=x_net, method=method,
+                                  lag_func_num=lag_func_num, lag_scale=lag_scale,
+                                  lag_num_dots=lag_num_dots,
+                                  additional_params=additional_params)
 
     if 'precomputed_coef_exp' in additional_params:
         coef = additional_params['precomputed_coef_exp']

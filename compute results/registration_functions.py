@@ -196,36 +196,35 @@ def fixed_image_precompute(image, additional_params, method, image_radius, lag_f
 
 
 def precompute_w_params(image_radius, pixel_sampling, com_offset_initial, lag_func_num,
-                        lag_scale, lag_num_dots=1000, compute_zeros=False, verbose=True):
+                        lag_scale, lag_num_dots=1000, compute_zeros=False, verbose=True, n_jobs=4):
     params = {}
 
     Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth = \
         set_integration_intervals(image_radius, pixel_sampling, com_offset_initial, verbose=verbose)
     params['integration_intervals'] = \
         Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth
+
     alphas = []
-    for it_m1 in tqdm(range(len(Im1))):
+    for it_m1 in range(len(Im1)):
         m1 = Im1[it_m1]
         for it_h1 in range(len(Ih1)):
             h1 = Ih1[it_h1]
             for it_mm in range(len(Imm)):
                 mm = Imm[it_mm]
-                if abs(m1 + h1 + mm) in alphas:
+                if m1 + h1 + mm in alphas:
                     continue
-                alphas.append(abs(m1 + h1 + mm))
+                alphas.append(m1 + h1 + mm)
     params['alphas'] = alphas
 
     if compute_zeros:
-        if os.path.exists(f'cryo_laguerre_zeros_{len(alphas)}_{lag_func_num}.pkl'):
-            with open(f'cryo_laguerre_zeros_{len(alphas)}_{lag_func_num}.pkl', 'rb') as file:
+        if os.path.exists(f'cryo_laguerre_zeros_{len(alphas)}_{lag_func_num * 2}.pkl'):
+            with open(f'cryo_laguerre_zeros_{len(alphas)}_{lag_func_num * 2}.pkl', 'rb') as file:
                 params['lag_zeros'] = pickle.load(file)
         else:
             print('lag_func_num', lag_func_num)
-            params['lag_zeros'] = laguerre_zeros_precompute(alphas, lag_func_num + 1)
-            with open(f'cryo_laguerre_zeros_{len(alphas)}_{lag_func_num}.pkl', 'wb') as file:
+            params['lag_zeros'] = laguerre_zeros_precompute(alphas, lag_func_num * 2, n_jobs=n_jobs)
+            with open(f'cryo_laguerre_zeros_{len(alphas)}_{lag_func_num * 2}.pkl', 'wb') as file:
                 pickle.dump(params['lag_zeros'], file)
-    params['integration_intervals'] = [Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net,
-                                       psi_net, eta_net, eps, b, bandwidth]
 
     laguerre_functions = laguerre_functions_precompute(alphas, x_net,
                                                        lag_func_num, lag_num_dots, lag_scale)

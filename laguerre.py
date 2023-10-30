@@ -1,5 +1,6 @@
 from typing import List, Any
 import numpy as np
+from scipy.interpolate import interp1d
 
 
 class Laguerre:
@@ -232,9 +233,8 @@ class Laguerre:
             x1 *= 0.5
         return np.sort(zeros)
 
-    def transform_forward_fast_x2sqrtx_laguerre_quad(self, laguerre_zeros, n_coef, alpha, data, x):
+    def calculate_mu(self, laguerre_zeros, n_coef, alpha):
         quadrature_order = len(laguerre_zeros)
-
         n_func = max(quadrature_order + 2, n_coef)
         functions = self.create_functions(n_func, alpha, laguerre_zeros, 1)
         lag = functions[:quadrature_order + 2]
@@ -243,18 +243,29 @@ class Laguerre:
 
         mu = laguerre_zeros.reshape(1, quadrature_order) ** 0.75 * laguerre_func / \
              (ksi * ksi + 1e-7).reshape(1, -1)
+        return mu
 
-        data_interpolated = np.zeros(quadrature_order, dtype='complex')
+    def transform_forward_fast_x2sqrtx_laguerre_quad(self, laguerre_zeros, n_coef, alpha, data, x, mu=None):
+        quadrature_order = len(laguerre_zeros)
+
+        if mu is None:
+            mu = self.calculate_mu(laguerre_zeros, n_coef, alpha)
+
+        # data_interpolated = np.zeros(quadrature_order, dtype='complex')
         sqrtZeros = laguerre_zeros ** 0.5
 
-        index = 1
-        for i in range(quadrature_order):
-            while (index < len(data) - 1) and (x[index] <= sqrtZeros[i]):
-                index += 1
-
-            if index < len(data):
-                data_interpolated[i] = ((x[index] - sqrtZeros[i]) * data[index - 1] + (
-                        sqrtZeros[i] - x[index - 1]) * data[index]) / (x[index] - x[index - 1])
+        # index = 1
+        # for i in range(quadrature_order):
+        #     while (index < len(data) - 1) and (x[index] <= sqrtZeros[i]):
+        #         index += 1
+        #
+        #     if index < len(data):
+        #         data_interpolated[i] = ((x[index] - sqrtZeros[i]) * data[index - 1] + (
+        #                 sqrtZeros[i] - x[index - 1]) * data[index]) / (x[index] - x[index - 1])
+        if x.max() < sqrtZeros.max():
+            x = np.linspace(x.min(), sqrtZeros.max()+1, num=len(x))
+        func = interp1d(x, data)
+        data_interpolated = func(sqrtZeros)
 
         laguerre_coeffs = (data_interpolated.reshape(1, quadrature_order) * mu).sum(axis=1) / \
                           (2 ** 0.5 * (quadrature_order + 1) * (quadrature_order + alpha + 1))

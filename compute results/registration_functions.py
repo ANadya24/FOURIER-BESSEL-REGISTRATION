@@ -12,7 +12,8 @@ from registration import (
     laguerre_zeros_precompute,
     image_fbt_precompute,
     fbm_registration,
-    laguerre_functions_precompute
+    laguerre_functions_precompute,
+    mu_precompute
 )
 
 from util_functions import (normalize,
@@ -148,7 +149,8 @@ def run_fbm_laguerre(seq, func_parameters, image_radius, pixel_sampling,
 
         if do_2nd_step:
             shifts = im_reg_met.phase_cross_correlation(fixed_image,
-                                                        normalize_func(sp.ndimage.gaussian_filter(im_reg1.copy(), 1.3)),
+                                                        normalize_func(
+                                                            sp.ndimage.gaussian_filter(im_reg1.copy(), 1.3)),
                                                         upsample_factor=100)[0][::-1]
 
             fbm_seq_shift.append(shift(im_reg1, -shifts))
@@ -196,7 +198,8 @@ def fixed_image_precompute(image, additional_params, method, image_radius, lag_f
 
 
 def precompute_w_params(image_radius, pixel_sampling, com_offset_initial, lag_func_num,
-                        lag_scale, lag_num_dots=1000, compute_zeros=False, verbose=True, n_jobs=4):
+                        lag_scale, lag_num_dots=1000, compute_zeros=False, verbose=True, n_jobs=4,
+                        num_zeros=None):
     params = {}
 
     Im1, Ih1, Imm, theta_net, u_net, x_net, omega_net, psi_net, eta_net, eps, b, bandwidth = \
@@ -217,14 +220,18 @@ def precompute_w_params(image_radius, pixel_sampling, com_offset_initial, lag_fu
     params['alphas'] = alphas
 
     if compute_zeros:
-        if os.path.exists(f'cryo_laguerre_zeros_{len(alphas)}_{lag_func_num * 2}.pkl'):
-            with open(f'cryo_laguerre_zeros_{len(alphas)}_{lag_func_num * 2}.pkl', 'rb') as file:
+        if num_zeros is None:
+            num_zeros = lag_func_num * 2
+
+        if os.path.exists(f'cryo_laguerre_zeros_{len(alphas)}_{num_zeros}.pkl'):
+            with open(f'cryo_laguerre_zeros_{len(alphas)}_{num_zeros}.pkl', 'rb') as file:
                 params['lag_zeros'] = pickle.load(file)
         else:
             print('lag_func_num', lag_func_num)
-            params['lag_zeros'] = laguerre_zeros_precompute(alphas, lag_func_num * 2, n_jobs=n_jobs)
-            with open(f'cryo_laguerre_zeros_{len(alphas)}_{lag_func_num * 2}.pkl', 'wb') as file:
+            params['lag_zeros'] = laguerre_zeros_precompute(alphas, num_zeros, n_jobs=n_jobs)
+            with open(f'cryo_laguerre_zeros_{len(alphas)}_{num_zeros}.pkl', 'wb') as file:
                 pickle.dump(params['lag_zeros'], file)
+        params['mus'] = mu_precompute(params['lag_zeros'], lag_func_num)
 
     laguerre_functions = laguerre_functions_precompute(alphas, x_net,
                                                        lag_func_num, lag_num_dots, lag_scale)

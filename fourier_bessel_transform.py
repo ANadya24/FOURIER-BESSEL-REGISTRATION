@@ -101,26 +101,26 @@ def FBT_Laguerre(pol, m, x_dest, x_src, theta_net, func_num, scale=1, num_dots=2
     lag_functions = lag_object.create_functions_x2_2sqrtx(func_num, m, x_src_multi_dot, 1)
     hankel_coefs = lag_object.transform_forward(func_num, gm_hat, lag_functions, x_src_multi_dot, 1)
 
-    # max_value = x_dest.max()
+    max_value = x_dest.max()+5
     # if x_dest.max() < 10:
     #     max_value *= 5
-    # x_dest_multi_dot = np.linspace(x_dest.min(), max_value, num_dots)
+    x_dest_multi_dot = np.linspace(x_dest.min(), max_value, num_dots)
     if out_lag_functions is None:
-        lag_functions = lag_object.create_functions_x2_2sqrtx(func_num, m, x_dest * scale, 1)
+        lag_functions = lag_object.create_functions_x2_2sqrtx(func_num, m, x_dest_multi_dot * scale, 1)
     else:
         lag_functions = out_lag_functions
     Fm_forward = np.array(lag_object.transform_backward(func_num, hankel_coefs, lag_functions))
-    mask = np.abs(x_dest) > 1e-4
-    Fm_forward[mask] = Fm_forward[mask] / x_dest[mask] ** 0.5
+    mask = np.abs(x_dest_multi_dot) > 1e-4
+    Fm_forward[mask] = Fm_forward[mask] / x_dest_multi_dot[mask] ** 0.5
 
     Fm = Fm_forward * scale
-    Fm = func_scale.interpolate_2_new_grid(x_dest, Fm, x_dest)
+    Fm = func_scale.interpolate_2_new_grid(x_dest_multi_dot, Fm, x_dest)
 
     return Fm
 
 
 def FBT_Laguerre_fast(pol, m, x_dest, x_src, theta_net, func_num, scale=1, num_dots=2000,
-                      zeros=None, return_zeros=False, lag_functions=None, num_zeros=None):
+                      zeros=None, mu=None, return_zeros=False, lag_functions=None, num_zeros=None):
     """
         compute formulas 10 and 11 from article
         Parameters:
@@ -139,6 +139,7 @@ def FBT_Laguerre_fast(pol, m, x_dest, x_src, theta_net, func_num, scale=1, num_d
         if num_zeros is None:
             num_zeros = func_num + 1
         zeros = lag_object.laguerre_zeros(num_zeros, m)
+        mu = lag_object.calculate_mu(zeros, func_num, m)
 
     if num_dots == -1:
         x_src_multi_dot = x_src
@@ -149,10 +150,10 @@ def FBT_Laguerre_fast(pol, m, x_dest, x_src, theta_net, func_num, scale=1, num_d
     gm_hat = func_scale.x_compress_function(x_src_multi_dot.copy(), fm_hat, scale)
 
     hankel_fast_coefs = lag_object.transform_forward_fast_x2sqrtx_laguerre_quad(zeros, func_num, m,
-                                                                                gm_hat, x_src_multi_dot)
-    max_value = x_dest.max()
-    if x_dest.max() < 10:
-        max_value *= 5
+                                                                                gm_hat, x_src_multi_dot, mu)
+    max_value = x_dest.max()+5
+    # if x_dest.max() < 10:
+    #     max_value *= 50
     x_dest_multi_dot = np.linspace(x_dest.min(), max_value, num_dots)
     if lag_functions is None:
         lag_functions = lag_object.create_functions_x2_2sqrtx(func_num, m, x_dest_multi_dot * scale, 1)

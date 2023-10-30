@@ -95,18 +95,26 @@ def laguerre_functions_precompute(alphas: List[int],
     laguerre_functions = {}
     lag_object = Laguerre()
 
-    # max_value = x.max()
+    max_value = x.max()+5
     # if x.max() < 10:
     #     max_value *= 5
-    # x_grid = np.linspace(x.min(), max_value, lag_num_dots)
+    x_grid = np.linspace(x.min(), max_value, lag_num_dots)
     for alpha in alphas:
         # if alpha >= 0 and alpha < 178:
         # if np.isinf(sp.special.gamma(abs(alpha))):
         #     continue
         if abs(alpha) not in laguerre_functions:
-            lag_functions = lag_object.create_functions_x2_2sqrtx(lag_func_num, alpha, x * lag_scale, 1)
+            lag_functions = lag_object.create_functions_x2_2sqrtx(lag_func_num, alpha, x_grid * lag_scale, 1)
             laguerre_functions[alpha] = lag_functions
     return laguerre_functions
+
+
+def mu_precompute(zeros,  lag_func_num: int = 40):
+    mus = {}
+    lag_object = Laguerre()
+    for alpha in zeros.keys():
+        mus[alpha] = lag_object.calculate_mu(zeros[alpha], lag_func_num, alpha)
+    return mus
 
 
 def laguerre_zeros_precompute(alphas: List[int], num_zeros: int = 40, abort_after: int = 5000, n_jobs:int = 4):
@@ -114,7 +122,7 @@ def laguerre_zeros_precompute(alphas: List[int], num_zeros: int = 40, abort_afte
     zeros_lag = {}
 
     def calc_zeros(alpha):
-        if np.isinf(sp.special.gamma(abs(alpha))):
+        if alpha != 0 and np.isinf(sp.special.gamma(abs(alpha))):
             return alpha, np.zeros(num_zeros)
         return alpha, lag_object.laguerre_zeros(num_zeros, alpha, abort_after=abort_after)
 
@@ -164,13 +172,18 @@ def image_fbt_precompute(image: np.ndarray, alphas: List[int], theta_net: np.nda
             elif not skip:
                 if 'lag_zeros' in additional_params:
                     zeros = additional_params['lag_zeros'][abs(alpha)]
+                    if 'mus' in additional_params:
+                        mu = additional_params['mus'][abs(alpha)]
+                    else:
+                        mu = None
                 else:
                     zeros = None
+                    mu = None
                 Fm = FBT_Laguerre_fast(image, abs(alpha),
                                        x_net, u_net, theta_net,
                                        lag_func_num, scale=lag_scale,
                                        num_dots=lag_num_dots, zeros=zeros,
-                                       lag_functions=laguerre_func)
+                                       lag_functions=laguerre_func, mu=mu)
 
                 if alpha < 0:
                     Fm *= (-1) ** abs(alpha)
